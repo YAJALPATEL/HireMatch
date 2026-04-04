@@ -43,11 +43,15 @@ export default function Navbar() {
         <div className="glass-strong rounded-2xl w-full mx-auto">
           <div className="flex items-center justify-between px-6 py-3">
             {/* Logo */}
-            <Link href="/" className="flex items-center gap-2 group">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center shadow-lg group-hover:shadow-xl transition-shadow">
-                <Sparkles className="w-5 h-5 text-white" />
+            <Link href="/" className="flex items-center gap-2.5 group">
+              <div className="relative w-9 h-9 rounded-xl overflow-hidden bg-gradient-to-br from-primary-500/10 to-accent-500/10 flex items-center justify-center shadow-lg group-hover:shadow-xl transition-shadow border border-white/10 group-hover:border-primary-500/30">
+                <img 
+                  src="/logo.png" 
+                  alt="HireMatch Logo" 
+                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" 
+                />
               </div>
-              <span className="text-lg font-bold font-[family-name:var(--font-display)] text-white">
+              <span className="text-xl font-bold font-[family-name:var(--font-display)] text-white tracking-tight">
                 Hire<span className="gradient-text">Match</span>
               </span>
             </Link>

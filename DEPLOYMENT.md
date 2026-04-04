@@ -1,66 +1,84 @@
-# 🚀 HireMatch AI Deployment & Setup Guide
+# 🚀 HireMatch AI Deployment & Lifetime Hosting Guide
 
-HireMatch AI is built using cutting-edge technologies suitable for free-tier hosting on Vercel. 
-
-## 🛠 Project Architecture
-- **Framework**: Next.js (App Router)
-- **Styling**: Tailwind CSS v4 + Framer Motion
-- **Storage**: Highly optimized `localStorage` JSON caching (instant speed).
-- **AI Intelligence**: Groq API (Incredibly fast, free tier available).
-- **Authentication**: Local Mock Auth (included) or Clerk (Drop-in ready!).
-
-## 🔑 Getting the API Keys
-
-To use real AI and Authentication, follow these steps to retrieve your free API keys:
-
-### 1. Clerk Authentication (Free)
-1. Go to [dashboard.clerk.com](https://dashboard.clerk.com) and create an application.
-2. Select **Email, Phone, Username** or any Social Providers (Google, GitHub) you want.
-3. In the API Keys section, copy the `Publishable Key` and `Secret Key`.
-
-### 2. Groq AI Integration (Ultra-fast, Free)
-1. Navigate to the [Groq Console](https://console.groq.com/).
-2. Sign in and generate a new API key.
-3. Copy the `GROQ_API_KEY`.
+HireMatch AI is optimized for **lifetime free hosting** using the most powerful modern cloud stack. Follow this guide to take your high-precision AI analyzer live in minutes.
 
 ---
 
-## 💻 Environment Variables Setup
+## 🛠 Project Architecture (Enterprise Stack)
+- **Frontend**: Next.js 15+ (App Router)
+- **Styling**: Radiant Midnight Indigo Theme (Tailwind CSS v4)
+- **Database & Real-time**: [Supabase](https://supabase.com/) (PostgreSQL)
+- **AI Intelligence**: [Google Gemini 2.0 Flash](https://aistudio.google.com/) (Fast, Precise, Free Tier)
+- **Auth**: Secure Private Vault for Admin + Session-based User Auth
 
-Create a `.env.local` file in the root folder (`y:\PROJECTS\Jd Analyse\hirematch-ai`) and add the following keys:
+---
+
+## 🔑 1. Get Your Free API Keys
+
+To go live, you'll need keys for the two core engines:
+
+### A. Supabase (Database & Auth - Free Tier)
+1. Go to [supabase.com](https://supabase.com/) and create a new project.
+2. In the **Project Settings > API**, copy your `Project URL` and `anon public` key.
+3. Run the following SQL in your **SQL Editor** to create the user profile table:
+   ```sql
+   create table user_profiles (
+     id uuid primary key default uuid_generate_v4(),
+     email text unique not null,
+     full_name text,
+     resume_data jsonb,
+     work_auth jsonb,
+     updated_at timestamp with time zone default now()
+   );
+   -- Enable Realtime for the table
+   alter publication supabase_realtime add table user_profiles;
+   ```
+
+### B. Gemini AI (Intelligence - Free Tier)
+1. Go to [Google AI Studio](https://aistudio.google.com/).
+2. Create a new API Key.
+3. Copy the `GEMINI_API_KEY`.
+
+---
+
+## 💻 2. Configure Environment Variables
+
+Create a `.env.local` file (or add these to your Vercel dashboard):
 
 ```ini
-# Clerk Auth Keys
-NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
-CLERK_SECRET_KEY=sk_test_...
+# Supabase Configuration
+NEXT_PUBLIC_SUPABASE_URL=https://your-project-id.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
 
-# Clerk Routes
-NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in
-NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up
-NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL=/dashboard
-NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL=/dashboard
+# AI Intelligence
+GEMINI_API_KEY=your-gemini-api-key
 
-# Groq API Key
-GROQ_API_KEY=gsk_...
-
-# Admin Configuration (Comma separated)
-NEXT_PUBLIC_ADMIN_EMAILS=your.email@example.com
+# Admin Master Auth
+# Use your personal email and secret password
+# URL will be yourdomain.com/yajalpatel
 ```
-
-> **Note on Demo Mode:** Currently, the app wraps itself in a smooth Demo Auth setup using `localStorage` and a deterministic AI Fallback parsing strategy so you could instantly develop and use it even without keys. 
-> * To switch back to real authentication, simply comment out `AuthProvider` from `src/app/layout.tsx` and bring back the `<ClerkProvider>`. Update `src/components/Navbar.tsx` and all pages to use `@clerk/nextjs` hooks as initially built.
 
 ---
 
-## 🚀 Deploying to Vercel (Free)
+## 🚀 3. Deploy to Vercel (Lifetime Free)
 
-Deploying Next.js to Vercel is straightforward:
+Vercel is the easiest and most powerful way to host Next.js apps for free forever.
 
-1. Push your code to a GitHub/GitLab repository.
-2. Log into [Vercel](https://vercel.com/) and click **Add New Project**.
-3. Select your GitHub repository.
-4. Expand the **Environment Variables** section.
-5. Paste your exact `.env.local` contents there.
-6. Click **Deploy**.
+1. **Connect GitHub**: Go to [Vercel.com](https://vercel.com/) and click **"Add New" > "Project"**.
+2. **Import Repo**: Select your `YAJALPATEL/HireMatch` repository.
+3. **Set Environment Variables**: 
+   - Expand the **Environment Variables** section.
+   - Add all the keys from your `.env.local` (Supabase and Gemini keys).
+4. **Deploy**: Click **"Deploy"**.
+5. **Live!** Vercel will give you a public URL (e.g., `hirematch.vercel.app`).
 
-In under 2 minutes, your blazing-fast AI Resume analyzer will be live worldwide! 🎉
+### 🌟 Why this is the "Best" Way:
+- **Automatic Updates**: Every time you push code to GitHub, Vercel updates the website automatically.
+- **SSL Included**: Your site will be secure (`https://`) for free.
+- **Global Speed**: Your dashboard and analyzer will load instantly worldwide.
+- **Zero Cost**: Gemini and Supabase both have massive free tiers that won't charge you for personal or small-scale usage.
+
+---
+
+### 🎉 Your website is now ready for the world! 
+Access your private admin vault at `your-vercel-url.com/yajalpatel` using your master credentials.
