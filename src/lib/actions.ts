@@ -59,10 +59,11 @@ export async function analyzeJD(
         },
         contents: [{
           role: "user",
-          parts: [{ text: buildPrompt(resume, jd, workAuth) }]
+          parts: [{ text: buildPrompt(resume, jd.substring(0, 5000), workAuth) }]
         }],
         generationConfig: {
           temperature: 0.0,
+          maxOutputTokens: 600,
           responseMimeType: "application/json"
         }
       }),
