@@ -197,7 +197,12 @@ export default function AnalyzerPage() {
       setHistory(getAnalysisHistory());
 
       if (user) {
-        trackAnalysis(user.id, user.emailAddresses?.[0]?.emailAddress || '');
+        trackAnalysis(
+          user.emailAddresses?.[0]?.emailAddress || 'anonymous',
+          analysis.roleTitle,
+          analysis.jdCompany,
+          analysis.overallMatch
+        );
       }
 
       toast.success('Analysis complete!');

@@ -215,18 +215,35 @@ function generateMockAnalysis(
   };
 }
 
-export async function trackAnalysis(userId: string, userEmail: string): Promise<void> {
+export async function trackAnalysis(
+  userEmail: string, 
+  jdTitle: string, 
+  jdCompany: string, 
+  matchScore: number
+): Promise<void> {
   const { createClient } = await import('@/utils/supabase/server');
   const { cookies } = await import('next/headers');
   const supabase = await createClient(await cookies());
   
   try {
-    // Log event to update user record last activity
+    // 1. Log the analysis record
+    await supabase.from('analysis_logs').insert({
+      user_email: userEmail,
+      jd_title: jdTitle,
+      jd_company: jdCompany,
+      match_score: matchScore,
+      created_at: new Date().toISOString()
+    });
+
+    // 2. Update user profile last active time
     await supabase
       .from('user_profiles')
-      .update({ updated_at: new Date().toISOString() })
+      .update({ 
+        updated_at: new Date().toISOString()
+      })
       .eq('email', userEmail);
+      
   } catch (e) {
-    console.log(`Fallback analysis tracking for: ${userEmail}`);
+    console.log(`Global tracking error: ${userEmail}`);
   }
 }
