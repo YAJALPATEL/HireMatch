@@ -20,7 +20,7 @@ export async function saveResume(data: ResumeData, email?: string): Promise<bool
         }, { onConflict: 'email' });
         
       if (!error) return true;
-      console.warn("Supabase save failed, falling back to local storage:", error.messuccess);
+      console.warn("Supabase save failed, falling back to local storage:", error.message);
     } catch (e) {
       console.warn("Supabase integration error.", e);
     }
