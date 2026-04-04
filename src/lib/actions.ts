@@ -8,14 +8,14 @@ function buildPrompt(resume: ResumeData, jd: string, workAuth: WorkAuth): string
   return `You are a forensic-level Career Advisor and ATS. Your goal is 100% strict, accurate mapping.
 
 INSTRUCTIONS:
-INSTRUCTIONS:
 1. Deeply analyze the provided Resume and Job Description.
 2. Identify ONLY the CORE technical and operational skills in the JD.
 3. Compare these CORE skills against the Candidate's Resume.
-4. "matched_skills": Place any core JD skill the candidate securely has here.
-5. "missing_skills": Place any core JD skill the candidate lacks here.
-6. Calculate 'role_match_score' (1 to 100) based on years of experience vs the JD.
-7. Output absolutely NO generic fluff, NO conversational text, and NO analysis text. Just the arrays.
+4. **SMART MAPPING:** Treat skill aliases and synonyms as EXACT MATCHES (e.g., "React.js" and "React", "Node.js" and "Node", "nextjs" and "Next.js", "Javascript" and "JS", etc.).
+5. "matched_skills": Place any core JD skill the candidate securely has (including aliases) here.
+6. "missing_skills": Place any core JD skill the candidate lacks here.
+7. Calculate 'role_match_score' (1 to 100) based on years of experience vs the JD.
+8. Output absolutely NO generic fluff, NO conversational text, and NO analysis text. Just the JSON.
 
 RESUME DATA: 
 Name: ${resume.fullName}
