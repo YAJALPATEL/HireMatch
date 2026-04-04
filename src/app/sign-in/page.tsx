@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { Mail, Lock, Sparkles, ArrowRight, Eye, EyeOff } from 'lucide-react';
+import { Mail, Lock, Sparkles, ArrowRight, Eye, EyeOff, ShieldCheck } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import toast from 'react-hot-toast';
 
@@ -24,84 +24,90 @@ export default function SignInPage() {
     }
     
     setLoading(true);
-    // Simulate brief delay
-    await new Promise(r => setTimeout(r, 600));
+    // Simulate brief delay for premium feel
+    await new Promise(r => setTimeout(r, 800));
     signIn(email, email.split('@')[0]);
-    toast.success('Welcome back!');
+    toast.success('Access Granted - Welcome to HireMatch');
     router.push('/dashboard');
     setLoading(false);
   };
 
   return (
-    <div className="min-h-screen gradient-bg-hero flex items-center justify-center px-4">
-      {/* Decorative Blobs */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="blob w-96 h-96 bg-slate-200 top-20 -right-20" />
-        <div className="blob w-80 h-80 bg-success-200 bottom-40 -left-20" />
-        <div className="blob w-60 h-60 bg-primary-400/15 top-1/2 left-1/4" />
+    <div className="min-h-screen bg-[#030310] flex items-center justify-center px-4 relative overflow-hidden">
+      {/* Dynamic Background Elements */}
+      <div className="absolute inset-0 z-0">
+        <div className="absolute top-[-10%] right-[-10%] w-[50%] h-[50%] bg-primary-900/20 rounded-full blur-[120px] animate-pulse" />
+        <div className="absolute bottom-[-10%] left-[-10%] w-[40%] h-[40%] bg-accent-900/20 rounded-full blur-[100px]" />
       </div>
 
       <motion.div
-        initial={{ opacity: 0, y: 20, scale: 0.97 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{ duration: 0.5 }}
-        className="relative z-10 w-full max-w-md"
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+        className="relative z-10 w-full max-w-[440px]"
       >
-        <div className="glass-strong rounded-3xl p-8 md:p-10">
-          {/* Logo */}
-          <div className="flex items-center justify-center gap-2 mb-8">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center shadow-lg">
-              <Sparkles className="w-5 h-5 text-white" />
-            </div>
-            <span className="text-xl font-bold font-[family-name:var(--font-display)] text-white">
-              Hire<span className="gradient-text">Match</span>
-            </span>
+        <div className="glass-strong rounded-[32px] p-8 md:p-12 border border-white/10 shadow-2xl">
+          {/* Brand Header */}
+          <div className="flex flex-col items-center mb-10">
+            <Link href="/" className="group mb-6">
+              <div className="relative w-14 h-14 rounded-2xl overflow-hidden bg-gradient-to-br from-primary-500/10 to-accent-500/10 flex items-center justify-center border border-white/10 group-hover:border-primary-500/30 transition-all shadow-lg">
+                <img src="/logo.png" alt="Logo" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+              </div>
+            </Link>
+            <h1 className="text-3xl font-bold text-white tracking-tight font-[family-name:var(--font-display)]">
+              Welcome Back
+            </h1>
+            <p className="text-indigo-300/60 mt-2 text-center text-sm font-medium">
+              Enter your credentials to access your insights
+            </p>
           </div>
 
-          <h1 className="text-2xl font-bold text-center text-white font-[family-name:var(--font-display)] mb-2">
-            Welcome Back
-          </h1>
-          <p className="text-center text-indigo-300/80 text-sm mb-8">
-            Sign in to analyze job descriptions
-          </p>
-
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div>
-              <label className="block text-sm font-medium text-indigo-200 mb-1.5">
-                Email Address
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-indigo-200/50 uppercase tracking-wider ml-1">
+                Professional Email
               </label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-indigo-300/80" />
+              <div className="relative group">
+                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                  <Mail className="h-4 w-4 text-indigo-400/50 group-focus-within:text-primary-400 transition-colors" />
+                </div>
                 <input
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@example.com"
-                  className="input pl-10"
+                  className="w-full bg-white/[0.03] border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-white placeholder-indigo-300/20 focus:outline-none focus:ring-2 focus:ring-primary-500/40 focus:border-primary-500/40 transition-all text-sm font-medium"
+                  placeholder="name@company.com"
                   required
                 />
               </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-indigo-200 mb-1.5">
-                Password
-              </label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-indigo-300/80" />
+            <div className="space-y-2">
+              <div className="flex justify-between items-center px-1">
+                <label className="text-xs font-semibold text-indigo-200/50 uppercase tracking-wider">
+                  Password
+                </label>
+                <button type="button" className="text-[11px] font-bold text-primary-400 hover:text-primary-300 transition-colors">
+                  Forgot?
+                </button>
+              </div>
+              <div className="relative group">
+                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                  <Lock className="h-4 w-4 text-indigo-400/50 group-focus-within:text-primary-400 transition-colors" />
+                </div>
                 <input
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  className="w-full bg-white/[0.03] border border-white/10 rounded-2xl py-4 pl-12 pr-12 text-white placeholder-indigo-300/20 focus:outline-none focus:ring-2 focus:ring-primary-500/40 focus:border-primary-500/40 transition-all text-sm font-medium"
                   placeholder="••••••••"
-                  className="input pl-10 pr-10"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-indigo-300/80 hover:text-indigo-200"
+                  className="absolute inset-y-0 right-0 pr-4 flex items-center text-indigo-400/30 hover:text-white transition-colors"
                 >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
             </div>
@@ -109,37 +115,33 @@ export default function SignInPage() {
             <button
               type="submit"
               disabled={loading}
-              className="btn-primary w-full py-3 text-base disabled:opacity-60"
+              className="relative w-full group overflow-hidden rounded-2xl p-[1px] font-bold transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-70 disabled:hover:scale-100"
             >
-              {loading ? (
-                <motion.div
-                  animate={{ rotate: 360 }}
-                  transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}
-                >
-                  <Sparkles className="w-5 h-5" />
-                </motion.div>
-              ) : (
-                <>
-                  Sign In
-                  <ArrowRight className="w-4 h-4" />
-                </>
-              )}
+              <div className="absolute inset-0 bg-gradient-to-r from-primary-500 to-accent-500 group-hover:opacity-90 transition-opacity" />
+              <div className="relative bg-[#0a0a1a]/90 backdrop-blur-xl rounded-[15px] py-4 flex items-center justify-center gap-2 text-white group-hover:bg-transparent transition-all">
+                {loading ? (
+                  <Sparkles className="w-5 h-5 animate-spin-slow" />
+                ) : (
+                  <>
+                    Sign In
+                    <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                  </>
+                )}
+              </div>
             </button>
           </form>
 
-          <p className="text-center text-sm text-indigo-300/80 mt-6">
-            Don&apos;t have an account?{' '}
-            <Link
-              href="/sign-up"
-              className="text-primary-500 font-medium hover:text-primary-600 transition-colors"
-            >
-              Sign Up
+          <p className="text-center mt-10 text-sm text-indigo-300/40 font-medium">
+            New to the platform?{' '}
+            <Link href="/sign-up" className="text-white hover:text-primary-400 transition-colors font-bold underline underline-offset-4 decoration-primary-500/30">
+              Create secure account
             </Link>
           </p>
 
-          <div className="mt-4 p-3 rounded-xl bg-accent-500/5 border border-accent-500/10 text-center">
-            <p className="text-xs text-indigo-300/80">
-              <span className="font-medium text-accent-600">Demo Mode:</span> Enter any email to sign in
+          <div className="mt-8 flex items-center justify-center gap-3 py-3 px-4 rounded-2xl bg-white/[0.02] border border-white/5">
+            <ShieldCheck className="w-4 h-4 text-emerald-400/60" />
+            <p className="text-[11px] text-indigo-200/40 font-medium tracking-wide">
+              DEMO ACCESS: ENTER ANY EMAIL TO PROCEED
             </p>
           </div>
         </div>

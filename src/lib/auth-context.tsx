@@ -29,19 +29,19 @@ export function useAuth() {
   return useContext(AuthContext);
 }
 
-const DEMO_AUTH_KEY = 'hirematch_demo_auth';
+const SESSION_KEY = 'hirematch_session_auth';
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoaded, setIsLoaded] = useState(false);
   const [user, setUser] = useState<MockUser | null>(null);
 
   useEffect(() => {
-    const stored = localStorage.getItem(DEMO_AUTH_KEY);
+    const stored = localStorage.getItem(SESSION_KEY);
     if (stored) {
       try {
         setUser(JSON.parse(stored));
       } catch {
-        localStorage.removeItem(DEMO_AUTH_KEY);
+        localStorage.removeItem(SESSION_KEY);
       }
     }
     setIsLoaded(true);
@@ -55,12 +55,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       imageUrl: '',
     };
     setUser(newUser);
-    localStorage.setItem(DEMO_AUTH_KEY, JSON.stringify(newUser));
+    localStorage.setItem(SESSION_KEY, JSON.stringify(newUser));
   };
 
   const signOut = () => {
     setUser(null);
-    localStorage.removeItem(DEMO_AUTH_KEY);
+    localStorage.removeItem(SESSION_KEY);
+    // Also clear admin session if it existed
+    sessionStorage.removeItem('hirematch_admin_auth');
   };
 
   return (

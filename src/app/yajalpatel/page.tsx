@@ -57,11 +57,20 @@ export default function YajalPatelAdmin() {
     e.preventDefault();
     if (creds.email === 'yajalpatel1@gmail.com' && creds.password === 'Siya@4624') {
       setIsAuthorized(true);
+      sessionStorage.setItem('hirematch_admin_auth', 'true');
       toast.success('Access Granted - Hello Yajal');
     } else {
       toast.error('Invalid Administrative Credentials');
     }
   };
+
+  useEffect(() => {
+    // Check for existing session
+    const savedSession = sessionStorage.getItem('hirematch_admin_auth');
+    if (savedSession === 'true') {
+      setIsAuthorized(true);
+    }
+  }, []);
 
   useEffect(() => {
     if (!isAuthorized) return;
