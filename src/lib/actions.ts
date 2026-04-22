@@ -133,7 +133,6 @@ const SKILL_ALIASES: Record<string, string[]> = {
   '.NET': ['.net', 'dotnet', 'asp.net', 'asp net'],
   'MATLAB': ['matlab'],
   'SAS': ['sas'],
-  'Tableau': ['tableau'],
   'Salesforce': ['salesforce', 'sfdc'],
   'SAP': ['sap'],
   'ServiceNow': ['servicenow', 'service now'],
