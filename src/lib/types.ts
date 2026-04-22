@@ -27,6 +27,8 @@ export interface AnalysisResult {
   overallMatch: number;
   matchedSkills: string[];
   missingSkills: string[];
+  experienceRequired: string;
+  experienceCurrent: string;
   roleTitle: string;
   visaRequirement: string;
   eligibility: 'allowed' | 'not_allowed' | 'unclear';

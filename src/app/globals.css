@@ -2,10 +2,10 @@
 
 @theme {
   /* HireMatch AI - Enterprise Radiant Dark Design System */
-  /* Deep Midnight Indigo (Rich, non-gray base) */
-  --color-base-50: #060613; /* Almost black but with deep indigo hint */
-  --color-base-100: #0C0C1E; /* Midnight Blue */
-  --color-base-200: #15152F; /* Deep Indigo */
+  /* Deep Midnight Indigo (Rich, non-gray base, tweaked slightly lighter) */
+  --color-base-50: #0A0A1A; /* Was #060613 */
+  --color-base-100: #12122A; /* Was #0C0C1E */
+  --color-base-200: #1C1C3D; /* Was #15152F */
   
   /* Enterprise Primary (Vibrant Blue/Indigo) */
   --color-primary-400: #818CF8;
@@ -68,7 +68,7 @@ body {
 
 /* ===== GLASSMORPHISM UTILITIES ===== */
 .glass {
-  background: rgba(30, 27, 75, 0.45); /* Indigo tinted glass */
+  background: rgba(40, 36, 100, 0.45); /* Lighter Indigo tinted glass */
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -76,7 +76,7 @@ body {
 }
 
 .glass-strong {
-  background: rgba(12, 12, 30, 0.82); /* Stronger Midnight Indigo blur */
+  background: rgba(20, 20, 45, 0.82); /* Lighter Midnight Indigo blur */
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -92,7 +92,7 @@ body {
 
 /* ===== CARD STYLES ===== */
 .card {
-  background: #09091A; /* Deep Indigo card */
+  background: #101026; /* Lighter Deep Indigo card */
   border-radius: var(--radius-lg);
   border: 1px solid rgba(99, 102, 241, 0.15); /* Indigo border tint */
   box-shadow: var(--shadow-card);
@@ -105,7 +105,7 @@ body {
 }
 
 .card-static {
-  background: #09091A;
+  background: #101026; /* Lighter Deep Indigo card */
   border-radius: var(--radius-lg);
   border: 1px solid rgba(99, 102, 241, 0.15);
   box-shadow: var(--shadow-card);
@@ -188,7 +188,7 @@ body {
   padding: 0.75rem 1rem;
   border-radius: var(--radius-md);
   border: 1.5px solid rgba(255, 255, 255, 0.08);
-  background: #030310;
+  background: #0A0A1F; /* Lighter input background */
   font-size: 0.95rem;
   color: white;
   transition: all 0.2s ease;
@@ -209,7 +209,7 @@ body {
   padding: 1rem;
   border-radius: var(--radius-md);
   border: 1.5px solid rgba(255, 255, 255, 0.08);
-  background: #030310;
+  background: #0A0A1F; /* Lighter input background */
   font-size: 0.95rem;
   color: white;
   transition: all 0.2s ease;
@@ -385,7 +385,7 @@ body {
   padding: 0.75rem 2.5rem 0.75rem 1rem;
   border-radius: var(--radius-md);
   border: 1.5px solid rgba(255, 255, 255, 0.08); /* Indigo tinted border */
-  background: #030310 url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%23818CF8' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e") no-repeat right 0.75rem center;
+  background: #0A0A1F url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%23818CF8' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e") no-repeat right 0.75rem center;
   background-size: 1.25rem;
   font-size: 0.95rem;
   color: white;

@@ -228,7 +228,10 @@ Role: ${result.roleTitle} at ${result.jdCompany}
 Skill Match: ${result.skillMatch}%
 Role Match: ${result.roleMatch}%
 Overall: ${result.overallMatch}%
-Eligibility: ${result.eligibility.toUpperCase()} - ${result.eligibilityReason}
+USC/GC/Clearance Needed: ${result.visaRequirement}
+
+Experience Required: ${result.experienceRequired}
+Experience Current: ${result.experienceCurrent}
 
 Matched Skills: ${result.matchedSkills.join(', ')}
 Missing Skills: ${result.missingSkills.join(', ')}
@@ -271,19 +274,34 @@ ${result.resumeImprovements.map((s, i) => `${i + 1}. ${s}`).join('\n')}`;
       doc.text(`Role Match: ${result.roleMatch}%`, 20, 80);
       doc.text(`Overall Match: ${result.overallMatch}%`, 20, 88);
 
-      // Eligibility
+      // Security Clearance / Visa
       doc.setFontSize(14);
-      doc.text('Eligibility', 20, 104);
+      doc.text('Security Clearance / Visa', 20, 104);
       doc.setFontSize(11);
-      const eligColor = result.eligibility === 'allowed' ? [34, 197, 94] :
-        result.eligibility === 'not_allowed' ? [239, 68, 68] : [245, 158, 11];
-      doc.setTextColor(eligColor[0], eligColor[1], eligColor[2]);
-      doc.text(`Status: ${result.eligibility.toUpperCase()}`, 20, 112);
+      
+      if (result.visaRequirement === 'Yes') {
+        doc.setTextColor(239, 68, 68); // Red
+      } else {
+        doc.setTextColor(34, 197, 94); // Green
+      }
+      doc.text(`USC / GC / Security Clearance Needed: ${result.visaRequirement}`, 20, 112);
+
+      // Experience
+      let yPos = 136;
+      doc.setFontSize(14);
+      doc.setTextColor(30, 41, 59);
+      doc.text('Experience Comparison', 20, yPos);
+      
+      yPos += 8;
+      doc.setFontSize(11);
       doc.setTextColor(100, 116, 139);
-      doc.text(result.eligibilityReason, 20, 120, { maxWidth: 170 });
+      doc.text(`Required: ${result.experienceRequired}`, 20, yPos, { maxWidth: 170 });
+      
+      yPos += 8;
+      doc.text(`Candidate: ${result.experienceCurrent}`, 20, yPos, { maxWidth: 170 });
 
       // Skills
-      let yPos = 138;
+      yPos += 16;
       doc.setFontSize(14);
       doc.setTextColor(30, 41, 59);
       doc.text('Matched Skills', 20, yPos);
@@ -632,27 +650,47 @@ ${result.resumeImprovements.map((s, i) => `${i + 1}. ${s}`).join('\n')}`;
                   </motion.div>
                 </div>
 
-                {/* Eligibility */}
+                {/* Security Clearance / Visa */}
                 <motion.div
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.4 }}
-                  className={`rounded-xl p-5 mb-6 border ${getEligibilityColor(result.eligibility)}`}
+                  className={`rounded-xl p-5 mb-6 border ${
+                    result.visaRequirement === 'Yes' 
+                      ? 'text-red-500 bg-red-500/10 border-red-500/20' 
+                      : 'text-success-500 bg-success-500/10 border-success-500/20'
+                  }`}
                 >
-                  <div className="flex items-start gap-3">
-                    {getEligibilityIcon(result.eligibility)}
-                    <div>
-                      <h3 className="font-semibold">
-                        Eligibility: {result.eligibility === 'allowed' ? 'Allowed' :
-                          result.eligibility === 'not_allowed' ? 'Not Allowed' : 'Unclear'}
-                      </h3>
-                      <p className="text-sm mt-1 opacity-80">{result.eligibilityReason}</p>
-                      {result.visaRequirement !== 'Not specified' && (
-                        <p className="text-xs mt-2 opacity-60">
-                          JD Requirement: {result.visaRequirement}
-                        </p>
-                      )}
-                    </div>
+                  <div className="flex items-center gap-3">
+                    {result.visaRequirement === 'Yes' ? (
+                      <XCircle className="w-5 h-5" />
+                    ) : (
+                      <CheckCircle2 className="w-5 h-5" />
+                    )}
+                    <h3 className="font-semibold">
+                      USC / GC / Security Clearance Needed: {result.visaRequirement === 'Yes' ? 'Yes' : 'No'}
+                    </h3>
+                  </div>
+                </motion.div>
+
+                {/* Experience Comparison */}
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.45 }}
+                  className="grid md:grid-cols-2 gap-4 mb-6"
+                >
+                  <div className="card-static p-6 border-l-4 border-accent-500">
+                     <h3 className="font-semibold text-white mb-2 text-sm uppercase tracking-wider text-accent-500">
+                        Required Experience
+                     </h3>
+                     <p className="text-indigo-100">{result.experienceRequired}</p>
+                  </div>
+                  <div className="card-static p-6 border-l-4 border-primary-500">
+                     <h3 className="font-semibold text-white mb-2 text-sm uppercase tracking-wider text-primary-500">
+                        Your Experience
+                     </h3>
+                     <p className="text-indigo-100">{result.experienceCurrent}</p>
                   </div>
                 </motion.div>
 

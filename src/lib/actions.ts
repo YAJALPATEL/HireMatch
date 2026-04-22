@@ -4,18 +4,189 @@ import type { AnalysisResult, ResumeData, WorkAuth } from '@/lib/types';
 
 const GEMINI_REST_URL = (key: string) => `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`;
 
-function buildPrompt(resume: ResumeData, jd: string, workAuth: WorkAuth): string {
-  return `You are a forensic-level Career Advisor and ATS. Your goal is 100% strict, accurate mapping.
+/** Comprehensive skill alias map — normalizes variants to a single canonical name */
+const SKILL_ALIASES: Record<string, string[]> = {
+  'React': ['react', 'react.js', 'reactjs', 'react js'],
+  'Next.js': ['next.js', 'nextjs', 'next js', 'next'],
+  'Node.js': ['node.js', 'nodejs', 'node js', 'node'],
+  'Vue.js': ['vue', 'vue.js', 'vuejs', 'vue js'],
+  'Angular': ['angular', 'angularjs', 'angular.js', 'angular js'],
+  'JavaScript': ['javascript', 'js', 'java script', 'ecmascript', 'es6', 'es2015'],
+  'TypeScript': ['typescript', 'ts', 'type script'],
+  'Python': ['python', 'python3', 'py'],
+  'Java': ['java'],
+  'C++': ['c++', 'cpp', 'c plus plus'],
+  'C#': ['c#', 'csharp', 'c sharp', 'c-sharp'],
+  'Ruby': ['ruby'],
+  'Go': ['go', 'golang'],
+  'Rust': ['rust'],
+  'Swift': ['swift'],
+  'Kotlin': ['kotlin'],
+  'PHP': ['php'],
+  'SQL': ['sql', 'structured query language'],
+  'NoSQL': ['nosql', 'no-sql'],
+  'MongoDB': ['mongodb', 'mongo'],
+  'PostgreSQL': ['postgresql', 'postgres', 'pg'],
+  'MySQL': ['mysql', 'my sql'],
+  'Redis': ['redis'],
+  'Elasticsearch': ['elasticsearch', 'elastic search', 'elastic'],
+  'AWS': ['aws', 'amazon web services'],
+  'Azure': ['azure', 'microsoft azure'],
+  'GCP': ['gcp', 'google cloud', 'google cloud platform'],
+  'Docker': ['docker'],
+  'Kubernetes': ['kubernetes', 'k8s'],
+  'Terraform': ['terraform'],
+  'CI/CD': ['ci/cd', 'cicd', 'ci cd', 'continuous integration', 'continuous deployment', 'continuous delivery'],
+  'Jenkins': ['jenkins'],
+  'GitHub Actions': ['github actions'],
+  'Git': ['git'],
+  'Linux': ['linux'],
+  'HTML': ['html', 'html5'],
+  'CSS': ['css', 'css3'],
+  'Sass': ['sass', 'scss'],
+  'Tailwind CSS': ['tailwind', 'tailwindcss', 'tailwind css'],
+  'Bootstrap': ['bootstrap'],
+  'Material UI': ['material ui', 'material-ui', 'mui'],
+  'Express': ['express', 'express.js', 'expressjs'],
+  'Django': ['django'],
+  'Flask': ['flask'],
+  'Spring': ['spring', 'spring boot', 'springboot'],
+  'FastAPI': ['fastapi', 'fast api'],
+  'GraphQL': ['graphql', 'graph ql'],
+  'REST API': ['rest', 'rest api', 'restful', 'restful api'],
+  'Machine Learning': ['machine learning', 'ml'],
+  'Deep Learning': ['deep learning', 'dl'],
+  'NLP': ['nlp', 'natural language processing'],
+  'TensorFlow': ['tensorflow', 'tf'],
+  'PyTorch': ['pytorch', 'torch'],
+  'Pandas': ['pandas'],
+  'NumPy': ['numpy'],
+  'Agile': ['agile'],
+  'Scrum': ['scrum'],
+  'Jira': ['jira'],
+  'Figma': ['figma'],
+  'Jest': ['jest'],
+  'Cypress': ['cypress'],
+  'Selenium': ['selenium'],
+  'Playwright': ['playwright'],
+  'Firebase': ['firebase'],
+  'Supabase': ['supabase'],
+  'Prisma': ['prisma'],
+  'React Native': ['react native'],
+  'Flutter': ['flutter'],
+  'Webpack': ['webpack'],
+  'Vite': ['vite'],
+  'Redux': ['redux', 'redux toolkit', 'rtk'],
+  'RxJS': ['rxjs'],
+  'Microservices': ['microservices', 'micro services'],
+  'Serverless': ['serverless'],
+  'Lambda': ['lambda', 'aws lambda'],
+  'OAuth': ['oauth', 'oauth2', 'oauth 2.0'],
+  'JWT': ['jwt', 'json web token'],
+  'DevOps': ['devops', 'dev ops'],
+  'Tableau': ['tableau'],
+  'Power BI': ['power bi', 'powerbi'],
+  'Blockchain': ['blockchain'],
+  'Web3': ['web3', 'web 3'],
+  'Solidity': ['solidity'],
+  'Three.js': ['three.js', 'threejs'],
+  'D3.js': ['d3', 'd3.js', 'd3js'],
+  'Socket.io': ['socket.io', 'socketio', 'websocket', 'websockets'],
+  'RabbitMQ': ['rabbitmq', 'rabbit mq'],
+  'Kafka': ['kafka', 'apache kafka'],
+  'Nginx': ['nginx'],
+  'Apache': ['apache'],
+  'Ansible': ['ansible'],
+  'Puppet': ['puppet'],
+  'Chef': ['chef'],
+  'Datadog': ['datadog'],
+  'Grafana': ['grafana'],
+  'Prometheus': ['prometheus'],
+  'New Relic': ['new relic', 'newrelic'],
+  'Splunk': ['splunk'],
+  'Snowflake': ['snowflake'],
+  'Apache Spark': ['spark', 'apache spark', 'pyspark'],
+  'Hadoop': ['hadoop'],
+  'Airflow': ['airflow', 'apache airflow'],
+  'dbt': ['dbt'],
+  'Looker': ['looker'],
+  'Segment': ['segment'],
+  'Mixpanel': ['mixpanel'],
+  'Amplitude': ['amplitude'],
+  'Storybook': ['storybook'],
+  'Zustand': ['zustand'],
+  'MobX': ['mobx'],
+  'SWR': ['swr'],
+  'React Query': ['react query', 'tanstack query'],
+  'Styled Components': ['styled components', 'styled-components'],
+  'Emotion': ['emotion'],
+  'Framer Motion': ['framer motion', 'framer-motion'],
+  'GSAP': ['gsap', 'greensock'],
+  'Unity': ['unity'],
+  'Unreal Engine': ['unreal', 'unreal engine'],
+  'R': ['r programming', 'r language'],
+  'Scala': ['scala'],
+  'Haskell': ['haskell'],
+  'Perl': ['perl'],
+  'Bash': ['bash', 'shell scripting', 'shell'],
+  'PowerShell': ['powershell'],
+  '.NET': ['.net', 'dotnet', 'asp.net', 'asp net'],
+  'MATLAB': ['matlab'],
+  'SAS': ['sas'],
+  'Tableau': ['tableau'],
+  'Salesforce': ['salesforce', 'sfdc'],
+  'SAP': ['sap'],
+  'ServiceNow': ['servicenow', 'service now'],
+};
 
-INSTRUCTIONS:
-1. Deeply analyze the provided Resume and Job Description.
-2. Identify ONLY the CORE technical and operational skills in the JD.
-3. Compare these CORE skills against the Candidate's Resume.
-4. **SMART MAPPING:** Treat skill aliases and synonyms as EXACT MATCHES (e.g., "React.js" and "React", "Node.js" and "Node", "nextjs" and "Next.js", "Javascript" and "JS", etc.).
-5. "matched_skills": Place any core JD skill the candidate securely has (including aliases) here.
-6. "missing_skills": Place any core JD skill the candidate lacks here.
-7. Calculate 'role_match_score' (1 to 100) based on years of experience vs the JD.
-8. Output absolutely NO generic fluff, NO conversational text, and NO analysis text. Just the JSON.
+/**
+ * Normalize a skill string to its canonical name using the alias map.
+ * Returns the canonical form if found, otherwise returns the input trimmed.
+ */
+function normalizeSkill(raw: string): string {
+  const lower = raw.toLowerCase().trim();
+  for (const [canonical, aliases] of Object.entries(SKILL_ALIASES)) {
+    if (aliases.includes(lower) || canonical.toLowerCase() === lower) {
+      return canonical;
+    }
+  }
+  // Title-case fallback for unknown skills
+  return raw.trim();
+}
+
+function buildPrompt(resume: ResumeData, jd: string, workAuth: WorkAuth): string {
+  return `You are a forensic-level Career Advisor and ATS. Your goal is 100% strict, accurate, EXHAUSTIVE skill mapping.
+
+CRITICAL INSTRUCTIONS — READ CAREFULLY:
+
+**STEP 1 — FILTER THE JD:**
+- IGNORE sections titled or about: "What we offer", "Benefits", "Perks", "About us", "About the company", "Equal opportunity", "Our culture", "Compensation", "Why join us", or any non-requirement content.
+- FOCUS ONLY on: "Requirements", "Required skills", "Qualifications", "Must have", "Nice to have", "Responsibilities", "Tech stack", "Skills", "Experience required", or any section describing what the candidate needs.
+
+**STEP 2 — EXTRACT ALL SKILLS FROM JD:**
+- Extract EVERY SINGLE technical skill, framework, library, tool, language, methodology, platform, soft skill, and domain knowledge mentioned in the requirements/qualifications sections.
+- Do NOT limit to 2 or 3 skills. Extract the COMPLETE list — if the JD mentions 15 skills, list all 15. If it mentions 30, list all 30.
+- Include both hard skills AND soft skills (e.g., "communication", "leadership", "team player").
+
+**STEP 3 — NORMALIZE SKILL NAMES (CRITICAL):**
+- Treat ALL of these as THE SAME skill: "React", "React.js", "ReactJS", "REACT", "react" → normalize to "React"
+- Treat ALL of these as THE SAME skill: "Node.js", "NodeJS", "node", "Node" → normalize to "Node.js"
+- Treat ALL of these as THE SAME skill: "Next.js", "NextJS", "nextjs", "NEXT.JS" → normalize to "Next.js"
+- Treat ALL of these as THE SAME skill: "JavaScript", "JS", "Javascript", "java script" → normalize to "JavaScript"
+- Treat ALL of these as THE SAME skill: "TypeScript", "TS", "Typescript" → normalize to "TypeScript"
+- Apply this same normalization logic for ALL skills (AWS/Amazon Web Services, Python/Python3, Docker, etc.)
+- When comparing resume skills against JD skills, compare the NORMALIZED versions.
+
+**STEP 4 — MATCH AGAINST RESUME:**
+- Compare EVERY extracted JD skill (normalized) against the candidate's resume skills (also normalized).
+- "matched_skills": List EVERY JD skill the candidate has (use the canonical/clean skill name).
+- "missing_skills": List EVERY JD skill the candidate lacks (use the canonical/clean skill name).
+- Do NOT skip any skills. The sum of matched + missing must equal total JD skills.
+
+**STEP 5 — EXPERIENCE COMPARISON:**
+- Extract the REQUIRED experience from the JD (e.g., "3+ years", "5-7 years", "Senior level", etc.). If not explicitly stated, infer from the role level.
+- Extract the candidate's CURRENT experience from their resume (calculate total years from work history).
+- Return both as strings.
 
 RESUME DATA: 
 Name: ${resume.fullName}
@@ -30,8 +201,17 @@ JOB DESCRIPTION:
 ${jd}
 ---
 
-Return EXACTLY in this minimal JSON format: 
-{ "role_match_score": number, "matched_skills": ["String"], "missing_skills": ["String"], "role_title": "String", "company": "String", "visa_requirement": "allowed" }`;
+Return EXACTLY in this JSON format (no extra text, no markdown): 
+{
+  "role_match_score": number,
+  "matched_skills": ["Canonical Skill Name", ...],
+  "missing_skills": ["Canonical Skill Name", ...],
+  "experience_required": "e.g. 3+ years of experience in software development",
+  "experience_current": "e.g. 4 years of experience based on resume work history",
+  "role_title": "Clean Job Title",
+  "company": "Company Name",
+  "visa_requirement": "Yes or No. Answer 'Yes' ONLY if USC, GC, or Security Clearance is explicitly required for this role. Otherwise answer 'No'."
+}`;
 }
 
 export async function analyzeJD(
@@ -55,15 +235,15 @@ export async function analyzeJD(
       },
       body: JSON.stringify({
         systemInstruction: {
-          parts: [{ text: 'You are an absolute precision parsing machine. You only output valid JSON. Do not hallucinate data. Be strict.' }]
+          parts: [{ text: 'You are an absolute precision parsing machine. You only output valid JSON. Do not hallucinate data. Be strict. Extract ALL skills exhaustively — never truncate or summarize the skills list.' }]
         },
         contents: [{
           role: "user",
-          parts: [{ text: buildPrompt(resume, jd.substring(0, 5000), workAuth) }]
+          parts: [{ text: buildPrompt(resume, jd.substring(0, 8000), workAuth) }]
         }],
         generationConfig: {
           temperature: 0.0,
-          maxOutputTokens: 600,
+          maxOutputTokens: 2048,
           responseMimeType: "application/json"
         }
       }),
@@ -81,12 +261,30 @@ export async function analyzeJD(
 
     const parsed = JSON.parse(rawContent);
 
+    // Normalize all skill names from the AI response
+    const matchedRaw: string[] = Array.isArray(parsed.matched_skills) ? parsed.matched_skills : [];
+    const missingRaw: string[] = Array.isArray(parsed.missing_skills) ? parsed.missing_skills : [];
+    
+    const normalizedMatched = [...new Set(matchedRaw.map(normalizeSkill))];
+    const normalizedMissing = [...new Set(missingRaw.map(normalizeSkill))];
+    
+    // Remove any "missing" skills that are actually in matched (post-normalization dedup)
+    const matchedSet = new Set(normalizedMatched.map(s => s.toLowerCase()));
+    const dedupedMissing = normalizedMissing.filter(s => !matchedSet.has(s.toLowerCase()));
+
     // Javascript Math Accuracy Check
-    const matchedCount = Array.isArray(parsed.matched_skills) ? parsed.matched_skills.length : 0;
-    const missingCount = Array.isArray(parsed.missing_skills) ? parsed.missing_skills.length : 0;
+    const matchedCount = normalizedMatched.length;
+    const missingCount = dedupedMissing.length;
     const totalSkills = matchedCount + missingCount;
     
-    const exactSkillMatch = totalSkills > 0 ? Math.round((matchedCount / totalSkills) * 100) : 0;
+    let exactSkillMatch = 0;
+    if (totalSkills > 0) {
+      exactSkillMatch = Math.round((matchedCount / totalSkills) * 100);
+      // Prevent rounding up to 100 if there's at least one missing skill
+      if (exactSkillMatch === 100 && missingCount > 0) {
+        exactSkillMatch = 99;
+      }
+    }
     const finalRoleMatch = typeof parsed.role_match_score === 'number' ? parsed.role_match_score : 80;
 
     return {
@@ -98,14 +296,16 @@ export async function analyzeJD(
       skillMatch: exactSkillMatch,
       roleMatch: finalRoleMatch,
       overallMatch: Math.round((exactSkillMatch + finalRoleMatch) / 2),
-      matchedSkills: parsed.matched_skills || [],
-      missingSkills: parsed.missing_skills || [],
+      matchedSkills: normalizedMatched,
+      missingSkills: dedupedMissing,
+      experienceRequired: parsed.experience_required || 'Not specified in JD',
+      experienceCurrent: parsed.experience_current || 'Could not determine from resume',
       roleTitle: parsed.role_title || 'Analyzed Role',
-      visaRequirement: parsed.visa_requirement || 'Not specified',
+      visaRequirement: parsed.visa_requirement || 'No',
       eligibility: parsed.eligibility || 'unclear',
       eligibilityReason: 'Visa criteria extracted from standard ATS bounds.',
-      suggestions: parsed.missing_skills?.length > 0 ? [`Consider studying: ${parsed.missing_skills[0]}`, `Update your summary to reflect modern ${parsed.role_title} requirements.`] : ['Your resume heavily aligns with this role!'],
-      resumeImprovements: parsed.missing_skills?.length > 0 ? [`Explicitly list ${parsed.missing_skills.join(", ")} in your tech stack.`] : ['Maintain your current formatting, it parsed flawlessly.'],
+      suggestions: dedupedMissing.length > 0 ? [`Consider studying: ${dedupedMissing.slice(0, 3).join(', ')}`, `Update your summary to reflect modern ${parsed.role_title} requirements.`, `Add relevant projects that demonstrate ${dedupedMissing[0]} experience.`] : ['Your resume heavily aligns with this role!'],
+      resumeImprovements: dedupedMissing.length > 0 ? [`Explicitly list ${dedupedMissing.join(", ")} in your tech stack.`, `Add project examples using ${dedupedMissing.slice(0, 2).join(' and ')}.`, `Consider certifications for ${dedupedMissing[0]}.`] : ['Maintain your current formatting, it parsed flawlessly.'],
       rawJD: jd,
     };
   } catch (error) {
@@ -132,10 +332,19 @@ function generateMockAnalysis(
   ];
   
   const jdSkills = commonTechSkills.filter(s => jdLower.includes(s));
-  const matched = jdSkills.filter(s => resumeSkillsLower.includes(s));
-  const missing = jdSkills.filter(s => !resumeSkillsLower.includes(s));
   
-  const skillMatch = jdSkills.length > 0 ? Math.round((matched.length / jdSkills.length) * 100) : 65;
+  // Decide the final arrays before calculating the math so they match perfectly
+  let finalMatched = jdSkills.filter(s => resumeSkillsLower.includes(s));
+  let finalMissing = jdSkills.filter(s => !resumeSkillsLower.includes(s));
+  
+  if (finalMatched.length === 0 && finalMissing.length === 0) {
+    finalMatched = ['javascript', 'react', 'problem solving'];
+    finalMissing = ['kubernetes', 'terraform'];
+  }
+  
+  const skillMatch = (finalMatched.length + finalMissing.length) > 0 
+    ? Math.floor((finalMatched.length / (finalMatched.length + finalMissing.length)) * 100) 
+    : 65;
   const roleMatch = Math.round(Math.random() * 25 + 55);
   
   // Determine visa eligibility
@@ -192,10 +401,12 @@ function generateMockAnalysis(
     skillMatch,
     roleMatch,
     overallMatch: Math.round((skillMatch * 0.6 + roleMatch * 0.4)),
-    matchedSkills: matched.length > 0 ? matched : ['javascript', 'react', 'problem solving'],
-    missingSkills: missing.length > 0 ? missing : ['kubernetes', 'terraform'],
+    matchedSkills: finalMatched,
+    missingSkills: finalMissing,
+    experienceRequired: '3+ years of relevant experience',
+    experienceCurrent: '5 years of relevant experience',
     roleTitle,
-    visaRequirement: eligibility === 'unclear' ? 'Not specified in posting' : 'See eligibility details',
+    visaRequirement: (eligibility === 'not_allowed' || jdLower.includes('clearance') || jdLower.includes('us citizen')) ? 'Yes' : 'No',
     eligibility,
     eligibilityReason,
     suggestions: [
