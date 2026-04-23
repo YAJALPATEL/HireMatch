@@ -8,7 +8,7 @@ HireMatch AI is optimized for **lifetime free hosting** using the most powerful 
 - **Frontend**: Next.js 15+ (App Router)
 - **Styling**: Radiant Midnight Indigo Theme (Tailwind CSS v4)
 - **Database & Real-time**: [Supabase](https://supabase.com/) (PostgreSQL)
-- **AI Intelligence**: [Google Gemini 2.0 Flash](https://aistudio.google.com/) (Fast, Precise, Free Tier)
+- **AI Intelligence**: [Groq](https://console.groq.com/) — `llama-3.3-70b-versatile` (Ultra-fast, Free Tier)
 - **Auth**: Secure Private Vault for Admin + Session-based User Auth
 
 ---
@@ -34,10 +34,11 @@ To go live, you'll need keys for the two core engines:
    alter publication supabase_realtime add table user_profiles;
    ```
 
-### B. Gemini AI (Intelligence - Free Tier)
-1. Go to [Google AI Studio](https://aistudio.google.com/).
-2. Create a new API Key.
-3. Copy the `GEMINI_API_KEY`.
+### B. Groq AI (Intelligence - Free Tier)
+1. Go to [console.groq.com](https://console.groq.com/).
+2. Sign in and navigate to **API Keys**.
+3. Click **Create API Key** and copy the `GROQ_API_KEY`.
+4. The app uses `llama-3.3-70b-versatile` as the primary model and `llama-3.1-8b-instant` as the fallback. Both are available on the free tier.
 
 ---
 
@@ -50,8 +51,8 @@ Create a `.env.local` file (or add these to your Vercel dashboard):
 NEXT_PUBLIC_SUPABASE_URL=https://your-project-id.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
 
-# AI Intelligence
-GEMINI_API_KEY=your-gemini-api-key
+# AI Intelligence (Groq)
+GROQ_API_KEY=your-groq-api-key
 
 # Admin Master Auth
 # Use your personal email and secret password
@@ -68,7 +69,7 @@ Vercel is the easiest and most powerful way to host Next.js apps for free foreve
 2. **Import Repo**: Select your `YAJALPATEL/HireMatch` repository.
 3. **Set Environment Variables**: 
    - Expand the **Environment Variables** section.
-   - Add all the keys from your `.env.local` (Supabase and Gemini keys).
+   - Add all the keys from your `.env.local` (Supabase and Groq keys).
 4. **Deploy**: Click **"Deploy"**.
 5. **Live!** Vercel will give you a public URL (e.g., `hirematch.vercel.app`).
 
@@ -76,7 +77,7 @@ Vercel is the easiest and most powerful way to host Next.js apps for free foreve
 - **Automatic Updates**: Every time you push code to GitHub, Vercel updates the website automatically.
 - **SSL Included**: Your site will be secure (`https://`) for free.
 - **Global Speed**: Your dashboard and analyzer will load instantly worldwide.
-- **Zero Cost**: Gemini and Supabase both have massive free tiers that won't charge you for personal or small-scale usage.
+- **Zero Cost**: Groq and Supabase both have massive free tiers that won't charge you for personal or small-scale usage.
 
 ---
 

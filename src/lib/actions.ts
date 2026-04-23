@@ -1,8 +1,10 @@
 'use server';
 
-import type { AnalysisResult, ResumeData, WorkAuth } from '@/lib/types';
+import type { AnalysisResult, ResumeData, WorkAuth, VisaRequirement, VisaMatchResult, WorkAuthType, ExperienceProfile, ExperienceRequirement, ExperienceMatchDetail, SeniorityLevel } from '@/lib/types';
+import { normalizeSkillList, extractVisaRequirements, extractExperienceFromResume } from '@/lib/parser';
+import Groq from 'groq-sdk';
 
-const GEMINI_REST_URL = (key: string) => `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`;
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 /** Comprehensive skill alias map — normalizes variants to a single canonical name */
 const SKILL_ALIASES: Record<string, string[]> = {
@@ -152,166 +154,540 @@ function normalizeSkill(raw: string): string {
   // Title-case fallback for unknown skills
   return raw.trim();
 }
+const PASS1_SYSTEM = `You are a forensic job description analyst. Your only job is to 
+extract every single requirement from a job description with 
+perfect accuracy. You must find EVERY skill, tool, technology, 
+certification, domain knowledge, and soft skill — even if mentioned 
+only once, even if buried in responsibilities section, even if 
+implied by context.
 
-function buildPrompt(resume: ResumeData, jd: string, workAuth: WorkAuth): string {
-  return `You are a forensic-level Career Advisor and ATS. Your goal is 100% strict, accurate, EXHAUSTIVE skill mapping.
+EXTRACTION RULES:
+- Read the ENTIRE JD text three times before extracting
+- Extract skills from ALL sections: title, requirements, 
+  responsibilities, nice-to-have, about section, benefits
+- Separate proprietary tools from general skills
+- Identify skills implied by context:
+  * 'Lead a team' implies leadership skills
+  * 'Work with stakeholders' implies stakeholder communication
+  * 'Microservices' implies distributed systems knowledge
+  * 'CI/CD' implies DevOps knowledge
+- Categorize every skill into one of:
+  HARD_REQUIRED, SOFT_REQUIRED, HARD_PREFERRED, 
+  SOFT_PREFERRED, IMPLICIT, CERTIFICATION
+- For each skill, note WHERE in the JD it was found:
+  title / requirements / responsibilities / preferred / other`;
 
-CRITICAL INSTRUCTIONS — READ CAREFULLY:
+const PASS1_USER = (jdText: string) => `Extract ALL requirements from this JD with perfect accuracy.
 
-**STEP 1 — FILTER THE JD:**
-- IGNORE sections titled or about: "What we offer", "Benefits", "Perks", "About us", "About the company", "Equal opportunity", "Our culture", "Compensation", "Why join us", or any non-requirement content.
-- FOCUS ONLY on: "Requirements", "Required skills", "Qualifications", "Must have", "Nice to have", "Responsibilities", "Tech stack", "Skills", "Experience required", or any section describing what the candidate needs.
+JD TEXT:
+${jdText}
 
-**STEP 2 — EXTRACT ALL SKILLS FROM JD:**
-- Extract EVERY SINGLE technical skill, framework, library, tool, language, methodology, platform, soft skill, and domain knowledge mentioned in the requirements/qualifications sections.
-- Do NOT limit to 2 or 3 skills. Extract the COMPLETE list — if the JD mentions 15 skills, list all 15. If it mentions 30, list all 30.
-- Include both hard skills AND soft skills (e.g., "communication", "leadership", "team player").
-
-**STEP 3 — NORMALIZE SKILL NAMES (CRITICAL):**
-- Treat ALL of these as THE SAME skill: "React", "React.js", "ReactJS", "REACT", "react" → normalize to "React"
-- Treat ALL of these as THE SAME skill: "Node.js", "NodeJS", "node", "Node" → normalize to "Node.js"
-- Treat ALL of these as THE SAME skill: "Next.js", "NextJS", "nextjs", "NEXT.JS" → normalize to "Next.js"
-- Treat ALL of these as THE SAME skill: "JavaScript", "JS", "Javascript", "java script" → normalize to "JavaScript"
-- Treat ALL of these as THE SAME skill: "TypeScript", "TS", "Typescript" → normalize to "TypeScript"
-- Apply this same normalization logic for ALL skills (AWS/Amazon Web Services, Python/Python3, Docker, etc.)
-- When comparing resume skills against JD skills, compare the NORMALIZED versions.
-
-**STEP 4 — MATCH AGAINST RESUME:**
-- Compare EVERY extracted JD skill (normalized) against the candidate's resume skills (also normalized).
-- "matched_skills": List EVERY JD skill the candidate has (use the canonical/clean skill name).
-- "missing_skills": List EVERY JD skill the candidate lacks (use the canonical/clean skill name).
-- Do NOT skip any skills. The sum of matched + missing must equal total JD skills.
-
-**STEP 5 — EXPERIENCE COMPARISON:**
-- Extract the REQUIRED experience from the JD (e.g., "3+ years", "5-7 years", "Senior level", etc.). If not explicitly stated, infer from the role level.
-- Extract the candidate's CURRENT experience from their resume (calculate total years from work history).
-- Return both as strings.
-
-RESUME DATA: 
-Name: ${resume.fullName}
-Skills: ${resume.skills.join(', ')}
-Summary: ${resume.summary || 'Not provided'}
-Experience: ${resume.experience || 'Not provided'}
-
-WORK AUTH: ${workAuth.label} (Needs sponsorship: ${workAuth.requiresSponsorship})
-
-JOB DESCRIPTION: 
----
-${jd}
----
-
-Return EXACTLY in this JSON format (no extra text, no markdown): 
+Return ONLY this JSON:
 {
-  "role_match_score": number,
-  "matched_skills": ["Canonical Skill Name", ...],
-  "missing_skills": ["Canonical Skill Name", ...],
-  "experience_required": "e.g. 3+ years of experience in software development",
-  "experience_current": "e.g. 4 years of experience based on resume work history",
-  "role_title": "Clean Job Title",
-  "company": "Company Name",
-  "visa_requirement": "Yes or No. Answer 'Yes' ONLY if USC, GC, or Security Clearance is explicitly required for this role. Otherwise answer 'No'."
+  "jd_skills": {
+    "hard_required": [{
+      "skill": "string",
+      "original_text": "string",
+      "section_found": "string",
+      "is_proprietary": false,
+      "is_certification": false
+    }],
+    "soft_required": [{ "skill": "", "original_text": "", "section_found": "" }],
+    "hard_preferred": [{ "skill": "", "original_text": "", "section_found": "" }],
+    "soft_preferred": [{ "skill": "", "original_text": "", "section_found": "" }],
+    "implicit_requirements": [{ "skill": "", "inferred_from": "" }],
+    "certifications_required": [{ "cert": "", "is_mandatory": false }],
+    "domain_knowledge": ["string"],
+    "tools_and_platforms": ["string"],
+    "programming_languages": ["string"],
+    "frameworks_and_libraries": ["string"],
+    "cloud_platforms": ["string"],
+    "methodologies": ["string"],
+    "total_skills_found": 0
+  },
+  "experience_requirements": {
+    "required_years": null,
+    "required_years_raw_text": null,
+    "seniority_level": "string",
+    "is_strict": false
+  },
+  "visa_requirements": {
+    "raw_text": null,
+    "allowed_visas": ["string"],
+    "sponsorship_available": false,
+    "requires_clearance": false
+  },
+  "role_info": {
+    "title": "string",
+    "department": null,
+    "industry": null,
+    "team_size": null,
+    "work_model": "string"
+  }
 }`;
+
+const PASS2_SYSTEM = `You are a forensic resume analyst. Extract every single skill, 
+technology, tool, methodology, domain knowledge, and experience 
+from a resume with perfect accuracy.
+
+EXTRACTION RULES:
+- Read the ENTIRE resume text three times before extracting
+- Extract skills from ALL sections: skills list, work experience 
+  bullet points, project descriptions, education, certifications
+- Identify skills DEMONSTRATED in experience (stronger signal) 
+  vs skills just LISTED in skills section (weaker signal)
+- Normalize all skill variants to canonical names:
+  * JS = JavaScript, TS = TypeScript, React.js = React
+  * Node = Node.js, Postgres = PostgreSQL, K8s = Kubernetes
+  * GH Actions = GitHub Actions, TF = TensorFlow or Terraform
+    (use context to distinguish)
+- Detect years of experience PER SKILL where possible:
+  * If React appears in job from 2020-2023, that is 3 years React
+- Calculate total career years from date ranges
+  (Today = April 2026, 'Present'/'Current' = April 2026)`;
+
+const PASS2_USER = (resumeText: string) => `Extract ALL skills and experience from this resume.
+
+RESUME TEXT:
+${resumeText}
+
+Return ONLY this JSON:
+{
+  "candidate_skills": {
+    "all_skills": ["string"],
+    "skills_with_context": [{
+      "skill": "string",
+      "original_text": "string",
+      "demonstrated_in_work": false,
+      "listed_only": false,
+      "years_of_experience": null,
+      "proficiency_signal": "unknown"
+    }],
+    "programming_languages": ["string"],
+    "frameworks": ["string"],
+    "tools": ["string"],
+    "cloud": ["string"],
+    "databases": ["string"],
+    "methodologies": ["string"],
+    "soft_skills": ["string"],
+    "certifications": ["string"],
+    "domains_worked_in": ["string"]
+  },
+  "candidate_experience": {
+    "total_years": null,
+    "total_months": null,
+    "calculation_method": "string",
+    "job_entries": [{
+      "title": "string",
+      "company": "string",
+      "start": "string",
+      "end": "string",
+      "duration_months": 0,
+      "skills_used": ["string"]
+    }],
+    "most_recent_title": "string",
+    "seniority_level": "string",
+    "data_confidence": "low"
+  },
+  "candidate_profile": {
+    "work_authorization_mentioned": null,
+    "education_level": null,
+    "primary_domain": "string"
+  }
+}`;
+
+const PASS3_SYSTEM = `You are a strict ATS matching engine. You receive pre-extracted 
+skills from a JD and a resume. Your job is ONLY to match them 
+with perfect accuracy.
+
+MATCHING RULES — FOLLOW EXACTLY:
+1. A skill is MATCHED only if it exists in candidate_skills.all_skills
+   OR candidate_skills.skills_with_context
+2. Accept these as matches (synonyms):
+   - JavaScript/JS/ES6/ECMAScript → JavaScript
+   - TypeScript/TS → TypeScript
+   - React/React.js/ReactJS → React
+   - Node/Node.js/NodeJS → Node.js
+   - Postgres/PostgreSQL → PostgreSQL
+   - Mongo/MongoDB → MongoDB
+   - K8s/Kubernetes → Kubernetes
+   - TF (in ML context) → TensorFlow
+   - GCP/Google Cloud → GCP
+   - REST/RESTful/REST API → REST API
+3. DO NOT accept weak matches:
+   - Knowing Python does NOT mean knowing Scala
+   - Knowing React does NOT mean knowing Angular
+   - Knowing AWS does NOT mean knowing Salesforce
+   - Knowing Docker does NOT mean knowing Kubernetes (list separately)
+4. Proprietary tool rule: if JD requires a named proprietary 
+   platform (Guidewire, Salesforce, SAP, Workday, ServiceNow etc) 
+   and it is NOT in resume → this is a HARD MISS, never a partial match
+5. Score calculation:
+   required_matched = count of hard_required skills found in resume
+   required_total = total hard_required skills
+   preferred_matched = count of hard_preferred found
+   preferred_total = total hard_preferred
+   
+   skill_match_score = 
+     (required_matched / required_total × 100 × 0.70) + 
+     (preferred_matched / preferred_total × 100 × 0.30)
+   
+   IF any proprietary tool is in hard_required AND not matched:
+     skill_match_score = min(skill_match_score, 35)
+     add to deal_breakers`;
+
+const PASS3_USER = (pass1Result: any, pass2Result: any, workAuth: string) => `Match these pre-extracted JD requirements against this resume profile.
+
+JD EXTRACTION RESULT:
+${JSON.stringify(pass1Result)}
+
+RESUME EXTRACTION RESULT:
+${JSON.stringify(pass2Result)}
+
+CANDIDATE WORK AUTH: ${workAuth}
+
+Return ONLY this JSON:
+{
+  "skill_matching": {
+    "matched_required": [{
+      "skill": "string",
+      "matched_as": "string",
+      "match_type": "exact",
+      "confidence": "high"
+    }],
+    "missing_required": [{
+      "skill": "string",
+      "is_proprietary": false,
+      "is_learnable": false,
+      "alternative_in_resume": null
+    }],
+    "matched_preferred": [{ "skill": "", "matched_as": "", "match_type": "exact" }],
+    "missing_preferred": [{ "skill": "" }],
+    "matched_implicit": [{ "skill": "" }],
+    "missing_certifications": [{ "cert": "", "is_mandatory": false }]
+  },
+  "scores": {
+    "skill_match_score": 0,
+    "role_match_score": 0,
+    "experience_match_score": 0,
+    "visa_match_score": 0,
+    "overall_match_score": 0,
+    "score_breakdown": {
+      "required_skills_ratio": "string",
+      "preferred_skills_ratio": "string",
+      "experience_ratio": "string",
+      "proprietary_tool_penalty": false
+    }
+  },
+  "experience_match": {
+    "candidate_years": null,
+    "required_years": null,
+    "required_years_text": null,
+    "years_gap": null,
+    "meets_minimum": null,
+    "experience_match_score": 0,
+    "seniority_match": false,
+    "overqualified_risk": false,
+    "experience_notes": "string",
+    "jd_experience_mentioned": false,
+    "candidate_data_available": false
+  },
+  "visa_match": {
+    "visa_raw_text": null,
+    "allowed_visas": ["string"],
+    "sponsorship_available": false,
+    "candidate_auth": "string",
+    "is_eligible": false,
+    "visa_match_score": 0,
+    "visa_notes": "string",
+    "visa_required": false
+  },
+  "deal_breakers": ["string"],
+  "strengths": ["string"],
+  "ats_keywords_to_add": ["string"],
+  "resume_improvements": ["string"],
+  "application_recommendation": "Significant Gap",
+  "recommendation_reason": "string"
+}`;
+
+async function callGroqStrict(systemPrompt: string, userPrompt: string, maxTokens: number): Promise<string> {
+  const messages: Groq.Chat.ChatCompletionMessageParam[] = [
+    { role: 'system', content: systemPrompt },
+    { role: 'user',   content: userPrompt },
+  ];
+  try {
+    const completion = await groq.chat.completions.create({
+      model: 'llama-3.3-70b-versatile',
+      messages,
+      response_format: { type: 'json_object' },
+      temperature: 0.0,
+      max_tokens: maxTokens,
+    });
+    return completion.choices[0].message.content || '{}';
+  } catch (primaryErr) {
+    console.warn('Groq primary model failed, retrying with fallback:', primaryErr);
+    const fallback = await groq.chat.completions.create({
+      model: 'llama-3.1-8b-instant',
+      messages,
+      response_format: { type: 'json_object' },
+      temperature: 0.0,
+      max_tokens: maxTokens,
+    });
+    return fallback.choices[0].message.content || '{}';
+  }
 }
 
-export async function analyzeJD(
+export async function extractJDSkills(jdText: string) {
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey || apiKey.includes('your_')) return null;
+  const raw = await callGroqStrict(PASS1_SYSTEM, PASS1_USER(jdText), 3000);
+  return JSON.parse(raw);
+}
+
+export async function extractResumeSkills(resumeText: string) {
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey || apiKey.includes('your_')) return null;
+  const raw = await callGroqStrict(PASS2_SYSTEM, PASS2_USER(resumeText), 3000);
+  return JSON.parse(raw);
+}
+
+export async function matchSkills(
+  pass1: any,
+  pass2: any,
+  workAuth: WorkAuth,
   resume: ResumeData,
   jd: string,
-  workAuth: WorkAuth,
   jdHash: string
 ): Promise<AnalysisResult> {
-  const apiKey = process.env.GEMINI_API_KEY || process.env.OPENROUTER_API_KEY;
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey || apiKey.includes('your_') || !pass1 || !pass2) {
+    return generateMockAnalysis(resume, jd, workAuth, jdHash);
+  }
+
+  const raw = await callGroqStrict(PASS3_SYSTEM, PASS3_USER(pass1, pass2, workAuth.label), 4000);
+  const pass3 = JSON.parse(raw);
+
+  // Safely extract from Pass 1
+  const jdEx = pass1.jd_skills || {};
+  const jdExp = pass1.experience_requirements || {};
+  const jdVisa = pass1.visa_requirements || {};
+  const roleInfo = pass1.role_info || {};
+
+  // Safely extract from Pass 2
+  const resExp = pass2.candidate_experience || {};
   
-  if (!apiKey || apiKey.includes('your_')) {
-    // If no keys configured, return the fallback UI
-    return generateMockAnalysis(resume, jd, workAuth, jdHash);
-  }
+  // Safely extract from Pass 3
+  const match = pass3.skill_matching || {};
+  const scores = pass3.scores || {};
+  const expMatch = pass3.experience_match || {};
+  const visaMatch = pass3.visa_match || {};
 
-  try {
-    const response = await fetch(GEMINI_REST_URL(apiKey), {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        systemInstruction: {
-          parts: [{ text: 'You are an absolute precision parsing machine. You only output valid JSON. Do not hallucinate data. Be strict. Extract ALL skills exhaustively — never truncate or summarize the skills list.' }]
-        },
-        contents: [{
-          role: "user",
-          parts: [{ text: buildPrompt(resume, jd.substring(0, 8000), workAuth) }]
-        }],
-        generationConfig: {
-          temperature: 0.0,
-          maxOutputTokens: 2048,
-          responseMimeType: "application/json"
-        }
-      }),
-    });
+  const safeArr = (v: any) => Array.isArray(v) ? v : [];
+  
+  const matchedReq = safeArr(match.matched_required).map((s: any) => s.skill);
+  const missingReq = safeArr(match.missing_required).map((s: any) => s.skill);
+  const matchedPref = safeArr(match.matched_preferred).map((s: any) => s.skill);
+  const missingPref = safeArr(match.missing_preferred).map((s: any) => s.skill);
+  
+  const allMatched = [...new Set([...matchedReq, ...matchedPref])];
+  const allMissing = [...new Set([...missingReq, ...missingPref])];
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.warn('Native Gemini API error:', errorText);
-      return generateMockAnalysis(resume, jd, workAuth, jdHash);
-    }
+  const skillMatchScore = scores.skill_match_score || 0;
+  const roleMatchScore = scores.role_match_score || 0;
+  const experienceMatchScore = expMatch.experience_match_score || 0;
+  const overallMatchScore = scores.overall_match_score || 0;
 
-    const data = await response.json();
-    let rawContent = data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
-    rawContent = rawContent.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+  const finalVisa: VisaRequirement = {
+    allowed_work_auths: safeArr(jdVisa.allowed_visas),
+    sponsorship_available: jdVisa.sponsorship_available || false,
+    requires_clearance: jdVisa.requires_clearance || false,
+    clearance_level: null,
+    raw_detected_phrases: jdVisa.raw_text ? [jdVisa.raw_text] : [],
+    confidence: 'high'
+  };
 
-    const parsed = JSON.parse(rawContent);
+  const visaMatchResult: VisaMatchResult = {
+    is_eligible: visaMatch.is_eligible || false,
+    needs_sponsorship: workAuth.requiresSponsorship,
+    sponsorship_will_be_provided: visaMatch.sponsorship_available || false,
+    eligibility_reason: visaMatch.visa_notes || '',
+    warning: null
+  };
 
-    // Normalize all skill names from the AI response
-    const matchedRaw: string[] = Array.isArray(parsed.matched_skills) ? parsed.matched_skills : [];
-    const missingRaw: string[] = Array.isArray(parsed.missing_skills) ? parsed.missing_skills : [];
+  const localExpProfile = extractExperienceFromResume(resume.rawText || resume.experience);
+  const candidateTotalYears = expMatch.candidate_years ?? resExp.total_years ?? localExpProfile.total_years;
+  const requiredMinYears = expMatch.required_years ?? jdExp.required_years ?? 0;
+
+  const aiExpMatch = {
+    candidate_total_years: candidateTotalYears,
+    required_min_years: requiredMinYears,
+    years_gap: expMatch.years_gap ?? (requiredMinYears - candidateTotalYears),
+    meets_minimum: expMatch.meets_minimum ?? (candidateTotalYears >= requiredMinYears),
+    level_match: expMatch.seniority_match ?? false,
+    level_gap: null,
+    experience_match_score: experienceMatchScore,
+    overqualified_risk: expMatch.overqualified_risk ?? false,
+    experience_notes: expMatch.experience_notes || '',
+    jd_experience_mentioned: expMatch.jd_experience_mentioned ?? false,
+    required_years: expMatch.required_years ?? null,
+    candidate_years: expMatch.candidate_years ?? null
+  } as unknown as ExperienceMatchDetail;
+
+  const aiExpReq: ExperienceRequirement = {
+    min_years: jdExp.required_years ?? 0,
+    max_years: null,
+    preferred_years: 0,
+    required_level: jdExp.seniority_level || 'mid',
+    experience_is_strict: jdExp.is_strict || false,
+    relevant_domain_experience: safeArr(jdEx.domain_knowledge)
+  };
+
+  return {
+    id: crypto.randomUUID(),
+    timestamp: new Date().toISOString(),
+    jdTitle: roleInfo.title || 'Analyzed Role',
+    jdCompany: roleInfo.company || 'Analyzed Company',
+    jdHash,
+    rawJD: jd,
+
+    skillMatch: skillMatchScore,
+    roleMatch: roleMatchScore,
+    overallMatch: overallMatchScore,
+    matchedSkills: allMatched,
+    missingSkills: allMissing,
+    experienceRequired: expMatch.required_years_text || jdExp.required_years_raw_text || 'Not specified',
+    experienceCurrent: `${candidateTotalYears} years`,
+    roleTitle: roleInfo.title || 'Analyzed Role',
+    visaRequirement: !finalVisa.sponsorship_available || finalVisa.requires_clearance ? 'Yes' : 'No',
+    eligibility: visaMatchResult.is_eligible ? 'allowed' : 'not_allowed',
+    eligibilityReason: visaMatchResult.eligibility_reason,
+    suggestions: safeArr(pass3.resume_improvements).length > 0 ? safeArr(pass3.resume_improvements) : ['Tailor your summary for this role.'],
+    resumeImprovements: safeArr(pass3.resume_improvements).length > 0 ? safeArr(pass3.resume_improvements) : ['Maintain your current formatting.'],
+
+    requiredSkills: safeArr(jdEx.hard_required).map((s:any) => s.skill),
+    preferredSkills: safeArr(jdEx.hard_preferred).map((s:any) => s.skill),
+    requiredExperienceYears: requiredMinYears,
+    roleLevel: (['junior','mid','senior','lead','principal'].includes(jdExp.seniority_level) ? jdExp.seniority_level : 'mid') as SeniorityLevel,
+    workAuthorizationRequired: safeArr(jdVisa.allowed_visas),
+    domainKeywords: safeArr(jdEx.domain_knowledge),
+
+    matchedRequiredSkills: matchedReq,
+    missingRequiredSkills: missingReq,
+    matchedPreferredSkills: matchedPref,
+    missingPreferredSkills: missingPref,
+    skillMatchScore: skillMatchScore,
+    experienceMatch: aiExpMatch.meets_minimum,
+    experienceGapYears: aiExpMatch.years_gap,
+    roleMatchScore: roleMatchScore,
+    overallMatchScore: overallMatchScore,
+
+    atsKeywordsToAdd: safeArr(pass3.ats_keywords_to_add),
+    strengths: safeArr(pass3.strengths),
+    dealBreakers: safeArr(pass3.deal_breakers),
+    visaMatch: visaMatchResult.is_eligible,
+
+    visaAnalysis: finalVisa,
+    visaMatchResult,
     
-    const normalizedMatched = [...new Set(matchedRaw.map(normalizeSkill))];
-    const normalizedMissing = [...new Set(missingRaw.map(normalizeSkill))];
-    
-    // Remove any "missing" skills that are actually in matched (post-normalization dedup)
-    const matchedSet = new Set(normalizedMatched.map(s => s.toLowerCase()));
-    const dedupedMissing = normalizedMissing.filter(s => !matchedSet.has(s.toLowerCase()));
-
-    // Javascript Math Accuracy Check
-    const matchedCount = normalizedMatched.length;
-    const missingCount = dedupedMissing.length;
-    const totalSkills = matchedCount + missingCount;
-    
-    let exactSkillMatch = 0;
-    if (totalSkills > 0) {
-      exactSkillMatch = Math.round((matchedCount / totalSkills) * 100);
-      // Prevent rounding up to 100 if there's at least one missing skill
-      if (exactSkillMatch === 100 && missingCount > 0) {
-        exactSkillMatch = 99;
-      }
-    }
-    const finalRoleMatch = typeof parsed.role_match_score === 'number' ? parsed.role_match_score : 80;
-
-    return {
-      id: crypto.randomUUID(),
-      timestamp: new Date().toISOString(),
-      jdTitle: parsed.role_title || 'Analyzed Role',
-      jdCompany: parsed.company || 'Analyzed Company',
-      jdHash,
-      skillMatch: exactSkillMatch,
-      roleMatch: finalRoleMatch,
-      overallMatch: Math.round((exactSkillMatch + finalRoleMatch) / 2),
-      matchedSkills: normalizedMatched,
-      missingSkills: dedupedMissing,
-      experienceRequired: parsed.experience_required || 'Not specified in JD',
-      experienceCurrent: parsed.experience_current || 'Could not determine from resume',
-      roleTitle: parsed.role_title || 'Analyzed Role',
-      visaRequirement: parsed.visa_requirement || 'No',
-      eligibility: parsed.eligibility || 'unclear',
-      eligibilityReason: 'Visa criteria extracted from standard ATS bounds.',
-      suggestions: dedupedMissing.length > 0 ? [`Consider studying: ${dedupedMissing.slice(0, 3).join(', ')}`, `Update your summary to reflect modern ${parsed.role_title} requirements.`, `Add relevant projects that demonstrate ${dedupedMissing[0]} experience.`] : ['Your resume heavily aligns with this role!'],
-      resumeImprovements: dedupedMissing.length > 0 ? [`Explicitly list ${dedupedMissing.join(", ")} in your tech stack.`, `Add project examples using ${dedupedMissing.slice(0, 2).join(' and ')}.`, `Consider certifications for ${dedupedMissing[0]}.`] : ['Maintain your current formatting, it parsed flawlessly.'],
-      rawJD: jd,
-    };
-  } catch (error) {
-    console.error('Analysis error:', error);
-    return generateMockAnalysis(resume, jd, workAuth, jdHash);
-  }
+    experienceProfile: localExpProfile,
+    experienceRequirements: aiExpReq,
+    experienceMatchDetail: aiExpMatch
+  };
 }
+
+// ---------------------------------------------------------------------------
+// Visa Match Checker
+// ---------------------------------------------------------------------------
+
+/** Map the WorkAuth.status string to a WorkAuthType for comparison */
+function candidateStatusToWorkAuthType(status: WorkAuth['status']): WorkAuthType {
+  const map: Record<WorkAuth['status'], WorkAuthType> = {
+    usc: 'USC', gc: 'GC', h1b: 'H1B', opt: 'OPT',
+    ead: 'H4-EAD', l1: 'L1', tn: 'TN', other: 'Any',
+  };
+  return map[status] ?? 'Any';
+}
+
+/**
+ * Deterministic check: can a candidate with `candidateAuth` apply for a job
+ * whose visa requirements are `jobVisa`?
+ */
+function checkVisaMatch(
+  candidateAuth: WorkAuth,
+  jobVisa: VisaRequirement,
+): VisaMatchResult {
+  const candidateType = candidateStatusToWorkAuthType(candidateAuth.status);
+  const needsSponsorship = candidateAuth.requiresSponsorship;
+
+  // If job allows "Any", everyone is eligible
+  if (jobVisa.allowed_work_auths.includes('Any')) {
+    return {
+      is_eligible: true,
+      needs_sponsorship: needsSponsorship,
+      sponsorship_will_be_provided: jobVisa.sponsorship_available,
+      eligibility_reason: `This role is open to all work authorizations. You hold ${candidateAuth.label}. ✓`,
+      warning: jobVisa.requires_clearance
+        ? `Security clearance (${jobVisa.clearance_level}) required — verify your eligibility.`
+        : null,
+    };
+  }
+
+  // USC is eligible for everything
+  if (candidateType === 'USC') {
+    return {
+      is_eligible: true,
+      needs_sponsorship: false,
+      sponsorship_will_be_provided: false,
+      eligibility_reason: `You are a US Citizen — eligible for all roles including clearance positions. ✓`,
+      warning: null,
+    };
+  }
+
+  // GC: eligible for all except USC-only clearance jobs
+  if (candidateType === 'GC') {
+    const uscOnly = jobVisa.allowed_work_auths.length === 1 && jobVisa.allowed_work_auths[0] === 'USC';
+    if (uscOnly) {
+      return {
+        is_eligible: false,
+        needs_sponsorship: false,
+        sponsorship_will_be_provided: false,
+        eligibility_reason: `This role requires US Citizenship only. Green Card does not qualify. ✗`,
+        warning: null,
+      };
+    }
+    const eligible = jobVisa.allowed_work_auths.includes('GC') || jobVisa.allowed_work_auths.includes('USC');
+    return {
+      is_eligible: eligible,
+      needs_sponsorship: false,
+      sponsorship_will_be_provided: false,
+      eligibility_reason: eligible
+        ? `You hold a Green Card — eligible for this role. ✓`
+        : `This role does not accept Green Card holders. ✗`,
+      warning: jobVisa.requires_clearance
+        ? `Security clearance (${jobVisa.clearance_level}) required — GC holders may face restrictions.`
+        : null,
+    };
+  }
+
+  // H1B, OPT, CPT, L1, TN, etc. — need sponsorship check
+  const directMatch = jobVisa.allowed_work_auths.includes(candidateType);
+  const eligible = directMatch && (jobVisa.sponsorship_available || !needsSponsorship);
+
+  return {
+    is_eligible: eligible,
+    needs_sponsorship: needsSponsorship,
+    sponsorship_will_be_provided: eligible && jobVisa.sponsorship_available,
+    eligibility_reason: eligible
+      ? `Your ${candidateAuth.label} status is accepted and ${jobVisa.sponsorship_available ? 'sponsorship is available' : 'no sponsorship needed'}. ✓`
+      : !directMatch
+        ? `This role does not accept ${candidateAuth.label} holders. ✗`
+        : `This role does not provide visa sponsorship. ✗`,
+    warning: jobVisa.requires_clearance
+      ? `Security clearance (${jobVisa.clearance_level}) required — non-citizens typically cannot obtain clearance.`
+      : null,
+  };
+}
+
 
 function generateMockAnalysis(
   resume: ResumeData,
@@ -391,23 +767,51 @@ function generateMockAnalysis(
     }
   }
 
+  // Experience for mock
+  const localExpProfile = extractExperienceFromResume(resume.rawText || resume.experience);
+  const mockExpMatch: ExperienceMatchDetail = {
+    candidate_total_years: localExpProfile.total_years,
+    required_min_years: 3,
+    years_gap: localExpProfile.total_years - 3,
+    meets_minimum: localExpProfile.total_years >= 3,
+    level_match: true,
+    level_gap: null,
+    experience_match_score: localExpProfile.total_years >= 3 ? 100 : 50,
+    overqualified_risk: false,
+    experience_notes: "Mock experience evaluation based on raw text."
+  };
+
+  // Use the rule-based visa detection for mock too
+  const mockVisa = extractVisaRequirements(jd);
+  const mockVisaMatch = checkVisaMatch(workAuth, mockVisa);
+
+  const overallMatch = Math.round(
+    skillMatch * 0.50 + 
+    roleMatch * 0.20 + 
+    mockExpMatch.experience_match_score * 0.20 + 
+    (mockVisaMatch.is_eligible ? 100 : 0) * 0.10
+  );
+
   return {
     id: crypto.randomUUID(),
     timestamp: new Date().toISOString(),
     jdTitle: roleTitle,
     jdCompany: 'Demo Company',
     jdHash,
+    rawJD: jd,
+
+    // Legacy
     skillMatch,
     roleMatch,
-    overallMatch: Math.round((skillMatch * 0.6 + roleMatch * 0.4)),
+    overallMatch,
     matchedSkills: finalMatched,
     missingSkills: finalMissing,
     experienceRequired: '3+ years of relevant experience',
     experienceCurrent: '5 years of relevant experience',
     roleTitle,
-    visaRequirement: (eligibility === 'not_allowed' || jdLower.includes('clearance') || jdLower.includes('us citizen')) ? 'Yes' : 'No',
-    eligibility,
-    eligibilityReason,
+    visaRequirement: !mockVisa.sponsorship_available || mockVisa.requires_clearance ? 'Yes' : 'No',
+    eligibility: mockVisaMatch.is_eligible ? 'allowed' : 'not_allowed',
+    eligibilityReason: mockVisaMatch.eligibility_reason,
     suggestions: [
       'Tailor your resume summary to highlight relevant experience for this role',
       'Add quantifiable achievements that demonstrate impact',
@@ -422,7 +826,47 @@ function generateMockAnalysis(
       'Highlight leadership or mentoring experience',
       'Add relevant side projects or open-source contributions',
     ],
-    rawJD: jd,
+
+    // Extraction phase
+    requiredSkills: finalMatched.concat(finalMissing),
+    preferredSkills: [],
+    requiredExperienceYears: 3,
+    roleLevel: 'mid',
+    workAuthorizationRequired: mockVisa.allowed_work_auths as string[],
+    domainKeywords: [],
+
+    // Matching phase
+    matchedRequiredSkills: finalMatched,
+    missingRequiredSkills: finalMissing,
+    matchedPreferredSkills: [],
+    missingPreferredSkills: [],
+    skillMatchScore: skillMatch,
+    experienceMatch: true,
+    experienceGapYears: -2,
+    roleMatchScore: roleMatch,
+    overallMatchScore: overallMatch,
+
+    // Feedback phase
+    atsKeywordsToAdd: finalMissing.slice(0, 5),
+    strengths: ['Strong alignment with core tech stack', 'Relevant experience level'],
+    dealBreakers: mockVisaMatch.warning ? [mockVisaMatch.warning] : [],
+    visaMatch: mockVisaMatch.is_eligible,
+
+    // Visa analysis
+    visaAnalysis: mockVisa,
+    visaMatchResult: mockVisaMatch,
+
+    // Experience analysis
+    experienceProfile: localExpProfile,
+    experienceRequirements: {
+      min_years: 3,
+      max_years: null,
+      preferred_years: 5,
+      required_level: 'mid',
+      experience_is_strict: false,
+      relevant_domain_experience: []
+    },
+    experienceMatchDetail: mockExpMatch,
   };
 }
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+import Groq from 'groq-sdk';
 
-const GEMINI_REST_URL = (key: string) => `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`;
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 export async function POST(request: NextRequest) {
   try {
@@ -10,8 +11,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing rawText data' }, { status: 400 });
     }
 
-    // Looking for a Native Gemini Key (commonly AIza...) or an old fallback
-    const apiKey = process.env.GEMINI_API_KEY || process.env.OPENROUTER_API_KEY;
+    const apiKey = process.env.GROQ_API_KEY;
 
     if (!apiKey || apiKey.includes('your_')) {
       // Return a basic parsed structure if no key exists so the app doesn't break
@@ -19,14 +19,14 @@ export async function POST(request: NextRequest) {
         fullName: "API Key Missing",
         email: "",
         phone: "",
-        summary: "Please configure OPENROUTER_API_KEY to use AI extraction.",
+        summary: "Please configure GROQ_API_KEY to use AI extraction.",
         skills: ["Add your keys", "in .env.local"],
         experience: "",
         education: ""
       }, { status: 200 });
     }
 
-    const prompt = `You are an elite, forensic Resume Parsing AI. 
+    const userPrompt = `You are an elite, forensic Resume Parsing AI. 
 Your singular goal is 100% accuracy and ZERO data loss. Take as much deep-processing time as needed.
 
 INSTRUCTIONS:
@@ -52,38 +52,34 @@ Return exactly in this JSON format and absolutely nothing else:
   "education": "Format as concise markdown bullet points."
 }`;
 
-    const response = await fetch(GEMINI_REST_URL(apiKey), {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        systemInstruction: {
-          parts: [{ text: 'You are an absolute precision data-extraction machine. You only output raw valid JSON. Do not output markdown, do not make mistakes, do not hallucinate.' }]
-        },
-        contents: [{
-          role: "user",
-          parts: [{ text: prompt }]
-        }],
-        generationConfig: {
-          temperature: 0.0,
-          responseMimeType: "application/json"
-        }
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.warn('Extraction API error:', errorText);
-      return NextResponse.json({ error: 'Extraction API error', details: errorText }, { status: 500 });
+    let rawContent: string;
+    try {
+      const completion = await groq.chat.completions.create({
+        model: 'llama-3.3-70b-versatile',
+        messages: [
+          { role: 'system', content: 'You are an absolute precision data-extraction machine. You only output raw valid JSON. Do not output markdown, do not make mistakes, do not hallucinate.' },
+          { role: 'user', content: userPrompt },
+        ],
+        response_format: { type: 'json_object' },
+        temperature: 0.0,
+        max_tokens: 4000,
+      });
+      rawContent = completion.choices[0].message.content || '{}';
+    } catch (primaryErr) {
+      console.warn('Extract: primary model failed, retrying with fallback:', primaryErr);
+      const fallback = await groq.chat.completions.create({
+        model: 'llama-3.1-8b-instant',
+        messages: [
+          { role: 'system', content: 'You are an absolute precision data-extraction machine. You only output raw valid JSON. Do not output markdown, do not make mistakes, do not hallucinate.' },
+          { role: 'user', content: userPrompt },
+        ],
+        response_format: { type: 'json_object' },
+        temperature: 0.0,
+        max_tokens: 4000,
+      });
+      rawContent = fallback.choices[0].message.content || '{}';
     }
 
-    const data = await response.json();
-    let rawContent = data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
-    
-    // Strip markdown JSON block if the AI returns it despite instructions
-    rawContent = rawContent.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-    
     let content;
     try {
       content = JSON.parse(rawContent);
@@ -91,10 +87,11 @@ Return exactly in this JSON format and absolutely nothing else:
       console.error('Failed to parse AI output:', rawContent);
       return NextResponse.json({ error: 'AI returned invalid formatting', raw: rawContent }, { status: 500 });
     }
-    
+
     return NextResponse.json(content);
-  } catch (error: any) {
-    console.error('Deep Extraction error:', error);
-    return NextResponse.json({ error: error.messuccess || 'Internal server error', stack: error.stack }, { status: 500 });
+  } catch (error: unknown) {
+    const err = error as Error;
+    console.error('Deep Extraction error:', err);
+    return NextResponse.json({ error: err.message || 'Internal server error' }, { status: 500 });
   }
 }

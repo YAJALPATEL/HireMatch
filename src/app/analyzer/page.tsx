@@ -23,9 +23,15 @@ import {
   ChevronDown,
   ChevronUp,
   RefreshCw,
+  Ban,
+  ThumbsUp,
+  ThumbsDown,
+  Timer,
+  ScrollText,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import Navbar from '@/components/Navbar';
+import ExperienceCard from '@/components/ExperienceCard';
 import { type AnalysisResult, type ResumeData, type WorkAuth } from '@/lib/types';
 import {
   getResume,
@@ -38,48 +44,45 @@ import {
   deleteAnalysisFromHistory,
   incrementUsuccessCount,
 } from '@/lib/storage';
-import { analyzeJD, trackAnalysis } from '@/lib/actions';
+import { extractJDSkills, extractResumeSkills, matchSkills, trackAnalysis } from '@/lib/actions';
+function ProgressIndicator({ step }: { step: 1|2|3|4 }) {
+  const steps = [
+    { id: 1, text: "🔍 Analyzing job requirements...", activeStep: 1 },
+    { id: 2, text: "📄 Reading your resume...", activeStep: 1 },
+    { id: 3, text: "🧮 Calculating your match...", activeStep: 3 },
+    { id: 4, text: "✅ Done!", activeStep: 4 }
+  ];
 
-function SkeletonLoader() {
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className="space-y-6"
+      className="card-static p-8 max-w-lg mx-auto mt-8 flex flex-col items-center justify-center text-center space-y-6"
     >
-      {/* Title skeleton */}
-      <div className="skeleton h-8 w-64 mb-2" />
-      <div className="skeleton h-5 w-48" />
-      
-      {/* Progress bars skeleton */}
-      <div className="grid md:grid-cols-3 gap-4">
-        {[1, 2, 3].map(i => (
-          <div key={i} className="card-static p-5">
-            <div className="skeleton h-4 w-24 mb-3" />
-            <div className="skeleton h-10 w-20 mb-3" />
-            <div className="skeleton h-3 w-full" />
-          </div>
-        ))}
-      </div>
-      
-      {/* Skills skeleton */}
-      <div className="card-static p-6">
-        <div className="skeleton h-5 w-32 mb-4" />
-        <div className="flex flex-wrap gap-2">
-          {[1, 2, 3, 4, 5, 6].map(i => (
-            <div key={i} className="skeleton h-7 w-20 rounded-full" />
-          ))}
+      <div className="relative w-20 h-20">
+        <motion.div 
+          animate={{ rotate: 360 }}
+          transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
+          className="absolute inset-0 rounded-full border-t-2 border-r-2 border-indigo-400"
+        />
+        <div className="absolute inset-0 flex items-center justify-center text-2xl">
+          {step === 4 ? "✅" : "⚙️"}
         </div>
       </div>
       
-      {/* Suggestions skeleton */}
-      <div className="card-static p-6">
-        <div className="skeleton h-5 w-40 mb-4" />
-        <div className="space-y-3">
-          {[1, 2, 3].map(i => (
-            <div key={i} className="skeleton h-4 w-full" />
-          ))}
-        </div>
+      <div className="space-y-4 w-full">
+        {steps.map((s, i) => {
+          const isActive = step === s.activeStep || (s.id === 2 && step === 1);
+          const isPast = step > s.activeStep;
+          return (
+            <div key={i} className={`flex items-center gap-3 p-3 rounded-lg transition-colors ${isActive ? 'bg-indigo-500/20 border border-indigo-500/30 text-indigo-200' : isPast ? 'text-indigo-400/50' : 'text-slate-600'}`}>
+              {isPast ? <CheckCircle2 className="w-5 h-5 text-green-500" /> : 
+               isActive ? <motion.div animate={{ rotate: 360 }} transition={{ duration: 2, repeat: Infinity, ease: "linear" }}><RefreshCw className="w-5 h-5 text-indigo-400" /></motion.div> :
+               <div className="w-5 h-5 rounded-full border border-slate-600" />}
+              <span className="font-medium text-sm md:text-base">{s.text}</span>
+            </div>
+          );
+        })}
       </div>
     </motion.div>
   );
@@ -137,6 +140,7 @@ export default function AnalyzerPage() {
   const { user } = useAuth();
   const [jdText, setJdText] = useState('');
   const [loading, setLoading] = useState(false);
+  const [progressStep, setProgressStep] = useState<1|2|3|4>(1);
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [history, setHistory] = useState<AnalysisResult[]>([]);
   const [showHistory, setShowHistory] = useState(false);
@@ -188,28 +192,41 @@ export default function AnalyzerPage() {
     setResult(null);
 
     try {
-      const analysis = await analyzeJD(resume, jdText, workAuth, hash);
+      setProgressStep(1);
 
-      setResult(analysis);
-      cacheAnalysis(hash, analysis);
-      saveAnalysisToHistory(analysis);
-      incrementUsuccessCount();
-      setHistory(getAnalysisHistory());
+      const [pass1, pass2] = await Promise.all([
+        extractJDSkills(jdText),
+        extractResumeSkills(resume.rawText || resume.experience)
+      ]);
 
-      if (user) {
-        trackAnalysis(
-          user.emailAddresses?.[0]?.emailAddress || 'anonymous',
-          analysis.roleTitle,
-          analysis.jdCompany,
-          analysis.overallMatch
-        );
-      }
+      setProgressStep(3);
 
-      toast.success('Analysis complete!');
+      const analysis = await matchSkills(pass1, pass2, workAuth, resume, jdText, hash);
+
+      setProgressStep(4);
+
+      setTimeout(() => {
+        setResult(analysis);
+        cacheAnalysis(hash, analysis);
+        saveAnalysisToHistory(analysis);
+        incrementUsuccessCount();
+        setHistory(getAnalysisHistory());
+
+        if (user) {
+          trackAnalysis(
+            user.emailAddresses?.[0]?.emailAddress || 'anonymous',
+            analysis.roleTitle,
+            analysis.jdCompany,
+            analysis.overallMatch
+          );
+        }
+
+        toast.success('Analysis complete!');
+        setLoading(false);
+      }, 800);
     } catch (error) {
       console.error(error);
       toast.error('Analysis failed. Please try again.');
-    } finally {
       setLoading(false);
     }
   }, [jdText, resume, workAuth, user]);
@@ -399,9 +416,46 @@ ${result.resumeImprovements.map((s, i) => `${i + 1}. ${s}`).join('\n')}`;
   };
 
   const getScoreColor = (score: number): string => {
-    if (score >= 75) return '#36B5AC';
-    if (score >= 50) return '#FFB06C';
-    return '#FF6B56';
+    if (score >= 90) return '#22c55e';
+    if (score >= 75) return '#3b82f6';
+    if (score >= 60) return '#eab308';
+    if (score >= 35) return '#f97316';
+    return '#ef4444';
+  };
+
+  const getScoreLabel = (score: number): string => {
+    if (score >= 90) return 'Strong Match';
+    if (score >= 75) return 'Good Match';
+    if (score >= 60) return 'Partial Match';
+    if (score >= 35) return 'Weak Match';
+    return 'Poor Match';
+  };
+
+  const getScoreLabelClass = (score: number): string => {
+    if (score >= 90) return 'text-green-400';
+    if (score >= 75) return 'text-blue-400';
+    if (score >= 60) return 'text-yellow-400';
+    if (score >= 35) return 'text-orange-400';
+    return 'text-red-400';
+  };
+
+  type RecommendationStyle = { bg: string; border: string; text: string; icon: React.ReactNode; sub?: string };
+  const getRecommendationStyle = (rec: string | undefined): RecommendationStyle => {
+    switch (rec) {
+      case 'Strong Apply':
+        return { bg: 'bg-green-500/15', border: 'border-green-500/40', text: 'text-green-400', icon: <ThumbsUp className="w-5 h-5" /> };
+      case 'Apply with Caution':
+        return { bg: 'bg-yellow-500/15', border: 'border-yellow-500/40', text: 'text-yellow-400', icon: <AlertTriangle className="w-5 h-5" /> };
+      case 'Significant Gap':
+        return { bg: 'bg-orange-500/15', border: 'border-orange-500/40', text: 'text-orange-400', icon: <AlertTriangle className="w-5 h-5" /> };
+      case 'Do Not Apply':
+        return {
+          bg: 'bg-red-500/15', border: 'border-red-500/40', text: 'text-red-400', icon: <XCircle className="w-5 h-5" />,
+          sub: 'This role is not a match for your current profile. Consider roles that align with your actual skill set.',
+        };
+      default:
+        return { bg: 'bg-indigo-500/10', border: 'border-indigo-500/20', text: 'text-indigo-300', icon: <HelpCircle className="w-5 h-5" /> };
+    }
   };
 
   return (
@@ -586,8 +640,8 @@ ${result.resumeImprovements.map((s, i) => `${i + 1}. ${s}`).join('\n')}`;
 
           {/* Loading State */}
           {loading && (
-            <div className="card-static p-6 md:p-8">
-              <SkeletonLoader />
+            <div className="w-full">
+              <ProgressIndicator step={progressStep} />
             </div>
           )}
 
@@ -600,6 +654,108 @@ ${result.resumeImprovements.map((s, i) => `${i + 1}. ${s}`).join('\n')}`;
                 exit={{ opacity: 0, y: -30 }}
                 transition={{ duration: 0.5 }}
               >
+                {/* ① VISA MISMATCH — shown first if ineligible */}
+                {(result.visaMatchResult?.is_eligible === false ||
+                  result.visaAnalysis && (result.visaAnalysis as { visa_match_score?: number }).visa_match_score === 0) && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.97 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: 0.05 }}
+                    className="flex items-start gap-3 p-5 mb-4 rounded-xl bg-red-500/15 border-2 border-red-500/50 text-red-300"
+                  >
+                    <Ban className="w-6 h-6 text-red-400 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-bold text-red-300 text-sm">
+                        🚫 Visa Mismatch — This role requires [{(result.visaAnalysis as { allowed_visas?: string[]; allowed_work_auths?: string[] })?.allowed_visas?.join(', ') || result.workAuthorizationRequired?.join(', ') || 'specific authorization'}].
+                      </p>
+                      <p className="text-xs text-red-400/80 mt-1">
+                        You selected: <span className="font-semibold text-red-300">{result.visaMatchResult?.eligibility_reason || 'Your work authorization does not match.'}</span>
+                      </p>
+                    </div>
+                  </motion.div>
+                )}
+
+                {/* ② APPLICATION RECOMMENDATION banner */}
+                {(() => {
+                  const rec = (result as { application_recommendation?: string }).application_recommendation;
+                  const style = getRecommendationStyle(rec);
+                  return rec ? (
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.97 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ delay: 0.08 }}
+                      className={`flex items-start gap-3 p-5 mb-4 rounded-xl border-2 ${style.bg} ${style.border} ${style.text}`}
+                    >
+                      <span className="shrink-0 mt-0.5">{style.icon}</span>
+                      <div>
+                        <p className="font-bold text-sm">{rec}</p>
+                        {style.sub && <p className="text-xs mt-1 opacity-80">{style.sub}</p>}
+                      </div>
+                    </motion.div>
+                  ) : null;
+                })()}
+
+                {/* ③ DEAL BREAKERS — cannot miss */}
+                {result.dealBreakers?.length > 0 && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.1 }}
+                    className="p-5 mb-4 rounded-xl bg-red-500/10 border-2 border-red-500/50"
+                  >
+                    <h3 className="font-bold text-red-400 flex items-center gap-2 mb-3">
+                      <XCircle className="w-5 h-5" />
+                      ⚠️ Deal Breakers ({result.dealBreakers.length})
+                    </h3>
+                    <ul className="space-y-2">
+                      {result.dealBreakers.map((db, i) => (
+                        <li key={i} className="flex items-start gap-2 text-sm text-red-300">
+                          <span className="text-red-500 mt-0.5 shrink-0">✗</span>
+                          {db}
+                        </li>
+                      ))}
+                    </ul>
+                  </motion.div>
+                )}
+
+                {/* ④ EXPERIENCE GAP warning */}
+                {(result.experienceMatchDetail?.years_gap || 0) > 2 && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.12 }}
+                    className="flex items-start gap-3 p-4 mb-4 rounded-xl bg-orange-500/10 border border-orange-500/40 text-orange-300"
+                  >
+                    <Timer className="w-5 h-5 shrink-0 mt-0.5 text-orange-400" />
+                    <p className="text-sm">
+                      <span className="font-bold">⏱️ Experience Gap</span> — Role requires{' '}
+                      <span className="font-semibold">{result.experienceRequired || `${result.experienceRequirements?.min_years}+ years`}</span>,
+                      you have <span className="font-semibold">{result.experienceMatchDetail?.candidate_total_years} years</span>
+                      {' '}(<span className="font-semibold">{result.experienceMatchDetail.years_gap} year gap</span>).
+                    </p>
+                  </motion.div>
+                )}
+
+                {/* ⑤ MISSING CERTIFICATIONS */}
+                {((result as unknown as { certifications_missing?: string[] }).certifications_missing?.length ?? 0) > 0 && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.14 }}
+                    className="flex items-start gap-3 p-4 mb-4 rounded-xl bg-orange-500/10 border border-orange-500/40 text-orange-300"
+                  >
+                    <ScrollText className="w-5 h-5 shrink-0 mt-0.5 text-orange-400" />
+                    <div>
+                      <p className="font-bold text-sm mb-2">📜 Missing Certifications</p>
+                      <div className="flex flex-wrap gap-2">
+                        {(result as unknown as { certifications_missing: string[] }).certifications_missing.map((c, i) => (
+                          <span key={i} className="text-xs px-2 py-0.5 rounded-full bg-orange-500/20 border border-orange-500/30">{c}</span>
+                        ))}
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+
                 {/* Title */}
                 <div className="card-static p-6 md:p-8 mb-6">
                   <h2 className="text-xl font-bold text-white font-[family-name:var(--font-display)]">
@@ -609,43 +765,62 @@ ${result.resumeImprovements.map((s, i) => `${i + 1}. ${s}`).join('\n')}`;
                 </div>
 
                 {/* Score Cards */}
-                <div className="grid md:grid-cols-3 gap-4 mb-6">
+                <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
                   <motion.div
                     initial={{ opacity: 0, scale: 0.9 }}
                     animate={{ opacity: 1, scale: 1 }}
                     transition={{ delay: 0.1 }}
-                    className="card-static p-6 flex flex-col items-center"
+                    className="card-static p-6 flex flex-col items-center justify-center gap-1"
                   >
                     <CircularProgress
                       value={result.skillMatch}
                       color={getScoreColor(result.skillMatch)}
                       label="Skill Match"
                     />
+                    <span className={`text-xs font-semibold mt-1 ${getScoreLabelClass(result.skillMatch)}`}>{getScoreLabel(result.skillMatch)}</span>
                   </motion.div>
 
                   <motion.div
                     initial={{ opacity: 0, scale: 0.9 }}
                     animate={{ opacity: 1, scale: 1 }}
                     transition={{ delay: 0.2 }}
-                    className="card-static p-6 flex flex-col items-center"
+                    className="card-static p-6 flex flex-col items-center justify-center gap-1"
                   >
                     <CircularProgress
                       value={result.roleMatch}
                       color={getScoreColor(result.roleMatch)}
                       label="Role Fit"
                     />
+                    <span className={`text-xs font-semibold mt-1 ${getScoreLabelClass(result.roleMatch)}`}>{getScoreLabel(result.roleMatch)}</span>
                   </motion.div>
 
                   <motion.div
                     initial={{ opacity: 0, scale: 0.9 }}
                     animate={{ opacity: 1, scale: 1 }}
                     transition={{ delay: 0.3 }}
-                    className="card-static p-6 flex flex-col items-center"
+                    className="card-static p-6 flex flex-col items-center justify-center gap-1"
                   >
                     <CircularProgress
                       value={result.overallMatch}
                       color={getScoreColor(result.overallMatch)}
                       label="Overall Match"
+                    />
+                    <span className={`text-xs font-semibold mt-1 ${getScoreLabelClass(result.overallMatch)}`}>{getScoreLabel(result.overallMatch)}</span>
+                  </motion.div>
+
+                  {/* Experience Match — smart 4-state card */}
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: 0.35 }}
+                  >
+                    <ExperienceCard
+                      data={{
+                        experienceMatchDetail: result.experienceMatchDetail,
+                        experienceRequirements: result.experienceRequirements,
+                        experienceProfile: result.experienceProfile,
+                      }}
+                      isLoading={false}
                     />
                   </motion.div>
                 </div>
@@ -673,26 +848,40 @@ ${result.resumeImprovements.map((s, i) => `${i + 1}. ${s}`).join('\n')}`;
                   </div>
                 </motion.div>
 
-                {/* Experience Comparison */}
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.45 }}
-                  className="grid md:grid-cols-2 gap-4 mb-6"
-                >
-                  <div className="card-static p-6 border-l-4 border-accent-500">
-                     <h3 className="font-semibold text-white mb-2 text-sm uppercase tracking-wider text-accent-500">
-                        Required Experience
-                     </h3>
-                     <p className="text-indigo-100">{result.experienceRequired}</p>
-                  </div>
-                  <div className="card-static p-6 border-l-4 border-primary-500">
-                     <h3 className="font-semibold text-white mb-2 text-sm uppercase tracking-wider text-primary-500">
-                        Your Experience
-                     </h3>
-                     <p className="text-indigo-100">{result.experienceCurrent}</p>
-                  </div>
-                </motion.div>
+                {/* Experience Timeline */}
+                {result.experienceProfile?.job_entries?.length > 0 && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.45 }}
+                    className="card-static p-6 mb-6"
+                  >
+                    <h3 className="font-semibold text-white mb-6 flex items-center gap-2 text-sm uppercase tracking-wider text-accent-500">
+                      Experience Timeline
+                    </h3>
+                    <div className="space-y-4 relative before:absolute before:inset-0 before:ml-2 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-indigo-500/30">
+                      {result.experienceProfile.job_entries.map((job, idx) => (
+                        <div key={idx} className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group is-active">
+                          <div className="flex items-center justify-center w-5 h-5 rounded-full border border-indigo-500/50 bg-indigo-900 shadow shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 absolute left-0 md:left-1/2 -translate-x-1/2 transform z-10">
+                            <div className="w-2 h-2 bg-accent-500 rounded-full" />
+                          </div>
+                          <div className="w-[calc(100%-2rem)] md:w-[calc(50%-1.5rem)] bg-indigo-950/30 border border-indigo-500/20 p-4 rounded-xl ml-8 md:ml-0 shadow">
+                            <div className="flex items-center justify-between mb-1">
+                              <h4 className="font-bold text-white text-sm truncate pr-2">{job.title}</h4>
+                              <span className="shrink-0 text-[10px] px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-200">
+                                {Math.floor(job.duration_months / 12) > 0 ? `${Math.floor(job.duration_months / 12)}y ` : ''}
+                                {job.duration_months % 12 > 0 ? `${job.duration_months % 12}m` : ''}
+                                {job.duration_months === 0 ? '< 1m' : ''}
+                              </span>
+                            </div>
+                            <p className="text-xs text-indigo-300 mb-1">{job.company}</p>
+                            <p className="text-[10px] text-indigo-400">{job.start_date} - {job.end_date}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </motion.div>
+                )}
 
                 {/* Skills */}
                 <motion.div

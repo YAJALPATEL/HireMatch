@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+import Groq from 'groq-sdk';
 
-const GEMINI_REST_URL = (key: string) => `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`;
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 /** Comprehensive skill alias map — normalizes variants to a single canonical name */
 const SKILL_ALIASES: Record<string, string[]> = {
@@ -136,9 +137,6 @@ const SKILL_ALIASES: Record<string, string[]> = {
   'ServiceNow': ['servicenow', 'service now'],
 };
 
-/**
- * Normalize a skill string to its canonical name using the alias map.
- */
 function normalizeSkill(raw: string): string {
   const lower = raw.toLowerCase().trim();
   for (const [canonical, aliases] of Object.entries(SKILL_ALIASES)) {
@@ -148,12 +146,12 @@ function normalizeSkill(raw: string): string {
   }
   return raw.trim();
 }
+
 export async function POST(request: NextRequest) {
   try {
     const { resume, jd, workAuth, userId } = await request.json();
 
     if (!userId) {
-      // Allow demo usuccess without strict auth
       console.warn('Analysis requested without userId');
     }
 
@@ -164,17 +162,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Defaulting to OpenRouter which hosts hundreds of Free/Fast Models
-    const apiKey = process.env.GEMINI_API_KEY || process.env.OPENROUTER_API_KEY;
+    const apiKey = process.env.GROQ_API_KEY;
 
     if (!apiKey || apiKey.includes('your_')) {
       return NextResponse.json(
-        { error: 'API_KEY not configured', demo: true },
+        { error: 'GROQ_API_KEY not configured', demo: true },
         { status: 200 }
       );
     }
 
-    const prompt = `You are a forensic-level Career Advisor and ATS. Your goal is 100% strict, accurate, EXHAUSTIVE skill mapping.
+    const userPrompt = `You are a forensic-level Career Advisor and ATS. Your goal is 100% strict, accurate, EXHAUSTIVE skill mapping.
 
 CRITICAL INSTRUCTIONS — READ CAREFULLY:
 
@@ -232,39 +229,34 @@ Return EXACTLY in this JSON format (no extra text, no markdown):
   "resume_improvements": ["highly specific array based on missing skills"] 
 }`;
 
-    const response = await fetch(GEMINI_REST_URL(apiKey), {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        systemInstruction: {
-          parts: [{ text: 'You are an absolute precision parsing machine. You only output valid JSON. Do not hallucinate data. Be strict.' }]
-        },
-        contents: [{
-          role: "user",
-          parts: [{ text: prompt }]
-        }],
-        generationConfig: {
-          temperature: 0.0,
-          responseMimeType: "application/json"
-        }
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('AI API error:', errorText);
-      return NextResponse.json(
-        { error: 'AI API error', details: errorText },
-        { status: 500 }
-      );
+    let rawContent: string;
+    try {
+      const completion = await groq.chat.completions.create({
+        model: 'llama-3.3-70b-versatile',
+        messages: [
+          { role: 'system', content: 'You are an absolute precision parsing machine. You only output valid JSON. Do not hallucinate data. Be strict.' },
+          { role: 'user', content: userPrompt },
+        ],
+        response_format: { type: 'json_object' },
+        temperature: 0.0,
+        max_tokens: 4000,
+      });
+      rawContent = completion.choices[0].message.content || '{}';
+    } catch (primaryErr) {
+      console.warn('Analyze route: primary model failed, retrying with fallback:', primaryErr);
+      const fallback = await groq.chat.completions.create({
+        model: 'llama-3.1-8b-instant',
+        messages: [
+          { role: 'system', content: 'You are an absolute precision parsing machine. You only output valid JSON. Do not hallucinate data. Be strict.' },
+          { role: 'user', content: userPrompt },
+        ],
+        response_format: { type: 'json_object' },
+        temperature: 0.0,
+        max_tokens: 4000,
+      });
+      rawContent = fallback.choices[0].message.content || '{}';
     }
 
-    const data = await response.json();
-    let rawContent = data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
-    rawContent = rawContent.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-    
     let content;
     try {
       content = JSON.parse(rawContent);
@@ -276,10 +268,10 @@ Return EXACTLY in this JSON format (no extra text, no markdown):
     // Normalize all skill names from the AI response
     const matchedRaw: string[] = Array.isArray(content.matched_skills) ? content.matched_skills : [];
     const missingRaw: string[] = Array.isArray(content.missing_skills) ? content.missing_skills : [];
-    
+
     const normalizedMatched = [...new Set(matchedRaw.map(normalizeSkill))];
     const normalizedMissing = [...new Set(missingRaw.map(normalizeSkill))];
-    
+
     // Remove any "missing" skills that are actually in matched (post-normalization dedup)
     const matchedSet = new Set(normalizedMatched.map(s => s.toLowerCase()));
     const dedupedMissing = normalizedMissing.filter(s => !matchedSet.has(s.toLowerCase()));
@@ -288,7 +280,7 @@ Return EXACTLY in this JSON format (no extra text, no markdown):
     const matchedCount = normalizedMatched.length;
     const missingCount = dedupedMissing.length;
     const totalSkills = matchedCount + missingCount;
-    
+
     let exactSkillMatch = Math.round(Math.random() * (95 - 75) + 75); // Fallback heuristic
     if (totalSkills > 0) {
       exactSkillMatch = Math.round((matchedCount / totalSkills) * 100);
@@ -307,10 +299,11 @@ Return EXACTLY in this JSON format (no extra text, no markdown):
     content.missing_skills = dedupedMissing;
 
     return NextResponse.json(content);
-  } catch (error: any) {
-    console.error('Analysis API error:', error);
+  } catch (error: unknown) {
+    const err = error as Error;
+    console.error('Analysis API error:', err);
     return NextResponse.json(
-      { error: error.messuccess || 'Internal server error', stack: error.stack },
+      { error: err.message || 'Internal server error' },
       { status: 500 }
     );
   }
